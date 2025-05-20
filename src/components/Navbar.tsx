@@ -126,12 +126,6 @@ export const Navbar = () => {
               Home
             </Link>
             <Link
-              to="/shareApeek"
-              className="text-pink-600 font-semibold hover:text-black"
-            >
-              Share a Peek
-            </Link>
-            <Link
               to="/besties"
               className="text-pink-600 font-semibold hover:text-black"
             >
