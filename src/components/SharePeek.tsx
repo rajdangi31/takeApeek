@@ -64,7 +64,7 @@ export const SharePeek = () => {
                 Content
             </label>
             <textarea id="content" required rows={5}
-            onChange={(event =>setTitle(event.target.value))}
+            onChange={(event =>setContent(event.target.value))}
             />
         </div>
 
