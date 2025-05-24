@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Home } from "./pages/Home";
 import { Navbar } from "./components/Navbar";
 import { ShareAPeekPage } from "./pages/ShareAPeekPage";
+import { PeekPage } from "./pages/PeekPage";
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/shareApeek" element={<ShareAPeekPage />} />
+            <Route path="/post/:id" element={<PeekPage />} />
           </Routes>
         </main>
       </div>
