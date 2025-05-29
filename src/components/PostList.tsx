@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../supabase-client";
 import { PostItem } from "./PostItem";
+import { data } from "react-router";
 
 export interface Peeks {
   id: number;
@@ -10,17 +11,20 @@ export interface Peeks {
   image_url: string;
   user_email: string;
   avatar_url?: string;
+  like_count?: number;
+  comment_count: number;
 }
 
 const fetchPosts = async (): Promise<Peeks[]> => {
-  const { data, error } = await supabase
-    .from("Peeks")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.rpc("get_posts_with_counts")
+    
 
   if (error) throw new Error(error.message);
   return data as Peeks[];
+
 };
+
+console.log(data);
 
 export const PostList = () => {
   const { data, error, isLoading } = useQuery<Peeks[], Error>({

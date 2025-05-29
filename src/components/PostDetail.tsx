@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Peeks } from "./PostList";
 import { supabase } from "../supabase-client";
 import { LikeButton } from "./LikeButton";
+import { CommentSection } from "./CommentSection";
 
 interface Props {
   postId: number;
@@ -39,24 +40,17 @@ export const PostDetail = ({ postId }: Props) => {
   const username = data?.user_email?.split("@")[0] || "anonymous";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#fff0b8] to-white flex justify-center px-4 py-14">
-      <div className="bg-white rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.2)] max-w-md w-full px-6 py-10 text-center relative">
+    <div className="min-h-screen bg-gradient-to-b from-[#fff0b8] to-white px-4 py-10 space-y-12">
+      {/* Post Card */}
+      <div className="bg-white rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.2)] max-w-md w-full mx-auto px-6 py-10 text-center relative">
         {/* Avatar */}
         <div className="absolute -top-12 left-1/2 transform -translate-x-1/2">
           <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg bg-white">
-            {data?.avatar_url ? (
-              <img
-                src={data.avatar_url}
-                alt="User Avatar"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <img
-                src="/avatar-placeholder.png"
-                alt="User avatar"
-                className="w-full h-full object-cover"
-              />
-            )}
+            <img
+              src={data?.avatar_url || "/avatar-placeholder.png"}
+              alt="User avatar"
+              className="w-full h-full object-cover"
+            />
           </div>
         </div>
 
@@ -66,7 +60,7 @@ export const PostDetail = ({ postId }: Props) => {
         </h2>
 
         {/* Post Image */}
-        <div className="rounded-xl overflow-hidden shadow-[0_6px_15px_rgba(0,0,0,0.2)] my-6">
+        <div className="rounded-xl overflow-hidden shadow-md my-6">
           <img
             src={data?.image_url}
             alt={data?.title}
@@ -80,7 +74,7 @@ export const PostDetail = ({ postId }: Props) => {
         </p>
 
         {/* Posted Date */}
-        <p className="text-xs text-gray-500 italic font-medium">
+        <p className="text-xs text-gray-500 italic font-medium mb-3">
           Posted on{" "}
           {new Date(data!.created_at).toLocaleDateString(undefined, {
             year: "numeric",
@@ -88,10 +82,15 @@ export const PostDetail = ({ postId }: Props) => {
             day: "numeric",
           })}
         </p>
+
+        {/* Love Button */}
         <LikeButton postId={postId} />
       </div>
+
+      {/* Comment Section */}
+      <div className="max-w-md w-full mx-auto">
+        <CommentSection postId={postId} />
+      </div>
     </div>
-    
-    
   );
 };
