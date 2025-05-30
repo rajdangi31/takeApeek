@@ -9,11 +9,11 @@ export const PostItem = ({ post }: Props) => {
   const username = post.user_email?.split("@")[0] || "anonymous";
 
   return (
-    <div className="max-w-md mx-auto bg-pink-500 rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.25)] overflow-hidden my-8 text-white transition-transform transform hover:scale-[1.015]">
+    <div className="max-w-md mx-auto bg-gradient-to-br from-pink-500 to-pink-600 rounded-3xl shadow-[0_15px_35px_rgba(236,72,153,0.3)] overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(236,72,153,0.4)]">
       <Link to={`/post/${post.id}`}>
-        {/* Header: Avatar + Username */}
-        <div className="flex items-center px-5 pt-5">
-          <div className="w-12 h-12 rounded-full bg-white border-[3px] border-pink-100 shadow-lg overflow-hidden mr-4">
+        {/* Header with Avatar + Username */}
+        <div className="flex items-center px-5 pt-5 pb-2">
+          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/30 shadow-lg overflow-hidden mr-3 flex-shrink-0">
             {post.avatar_url ? (
               <img
                 src={post.avatar_url}
@@ -21,50 +21,58 @@ export const PostItem = ({ post }: Props) => {
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-gray-200" />
+              <div className="w-full h-full bg-gradient-to-br from-white/40 to-white/20 flex items-center justify-center">
+                <span className="text-white text-lg font-bold">
+                  {username.charAt(0).toUpperCase()}
+                </span>
+              </div>
             )}
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="font-bold text-[15px] text-black drop-shadow-sm">
+          <div className="flex flex-col leading-tight min-w-0 flex-1">
+            <span className="font-bold text-white text-base drop-shadow-sm truncate">
               {username}
             </span>
-            <span className="text-pink-100 text-xs -mt-0.5">@{username}</span>
+            <span className="text-pink-100 text-xs opacity-80">
+              {new Date(post.created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
           </div>
-        </div>
-
-        {/* Time */}
-        <div className="text-center text-xs font-medium text-white py-2 drop-shadow-sm">
-          {new Date(post.created_at).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
         </div>
 
         {/* Post Image */}
-        <div className="rounded-xl mx-5 overflow-hidden shadow-[0_6px_20px_rgba(0,0,0,0.25)] h-64 mt-1">
+        <div className="rounded-2xl overflow-hidden mx-4 mb-4 shadow-[0_8px_25px_rgba(0,0,0,0.2)] bg-white/10 backdrop-blur-sm">
           <img
             src={post.image_url}
-            alt={username}
-            className="w-full h-full object-cover"
+            alt={post.title}
+            className="w-full aspect-square object-cover"
           />
         </div>
 
-        {/* Optional Caption */}
+        {/* Caption */}
         {post.content && (
-          <div className="bg-black/40 text-white text-xs px-4 py-2 mt-3 mx-5 rounded-xl font-light italic backdrop-blur-sm shadow-sm">
-            {post.content}
+          <div className="px-5 pb-2">
+            <div className="bg-black/20 backdrop-blur-sm text-white text-sm px-4 py-2 rounded-xl border border-white/10">
+              <p className="font-medium leading-relaxed">{post.content}</p>
+            </div>
           </div>
         )}
 
-        {/* Metrics: Likes + Comments */}
-        <div className="flex items-center justify-between px-5 pt-3 pb-4 text-sm font-medium text-white">
-          <div className="flex items-center gap-1">
-            <span>🖤</span>
-            <span>{post.like_count ?? 0}</span>
+        {/* Engagement Metrics */}
+        <div className="flex items-center justify-between px-5 pb-5 pt-2">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1 text-white">
+              <span className="text-lg">💖</span>
+              <span className="text-sm font-semibold">{post.like_count ?? 0}</span>
+            </div>
+            <div className="flex items-center gap-1 text-white">
+              <span className="text-lg">💬</span>
+              <span className="text-sm font-semibold">{post.comment_count ?? 0}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <span>💬</span>
-            <span>{post.comment_count ?? 0}</span>
+          <div className="text-white/70 text-xs">
+            {new Date(post.created_at).toLocaleDateString()}
           </div>
         </div>
       </Link>
