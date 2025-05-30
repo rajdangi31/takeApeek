@@ -10,40 +10,121 @@ interface PostInput {
   avatar_url: string | null;
 }
 
+// Helper function to compress/resize image
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const img = new Image();
+    
+    img.onload = () => {
+      // Set max dimensions
+      const maxWidth = 1200;
+      const maxHeight = 1200;
+      
+      let { width, height } = img;
+      
+      // Calculate new dimensions
+      if (width > height) {
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = (width * maxHeight) / height;
+          height = maxHeight;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Draw and compress
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        },
+        'image/jpeg',
+        0.8 // 80% quality
+      );
+    };
+    
+    img.src = URL.createObjectURL(file);
+  });
+};
+
 const sharePeek = async (post: PostInput, imageFile: File) => {
-  const filePath = `${post.title}-${Date.now()}-${imageFile.name}`;
-  
-  const { error: uploadError } = await supabase.storage
-    .from("peeks")
-    .upload(filePath, imageFile);
+  try {
+    // First compress the image
+    const compressedFile = await compressImage(imageFile);
+    
+    const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}-${compressedFile.name}`;
+    
+    console.log('Uploading file:', filePath, 'Size:', compressedFile.size);
+    
+    const { error: uploadError } = await supabase.storage
+      .from("peeks")
+      .upload(filePath, compressedFile, {
+        cacheControl: '3600',
+        upsert: false
+      });
 
-  if (uploadError) throw new Error(uploadError.message);
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      throw new Error(`Upload failed: ${uploadError.message}`);
+    }
 
-  const { data: publicURLData } = supabase.storage
-    .from("peeks")
-    .getPublicUrl(filePath);
+    const { data: publicURLData } = supabase.storage
+      .from("peeks")
+      .getPublicUrl(filePath);
 
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData?.user) throw new Error("User not authenticated");
+    console.log('Public URL:', publicURLData.publicUrl);
 
-  const userEmail = userData.user.email;
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      console.error('User error:', userError);
+      throw new Error("User not authenticated");
+    }
 
-  const { data, error } = await supabase
-    .from("Peeks")
-    .insert({
-      ...post,
-      image_url: publicURLData.publicUrl,
-      user_email: userEmail,
-    });
+    const userEmail = userData.user.email;
 
-  if (error) throw new Error(error.message);
-  return data;
+    const { data, error } = await supabase
+      .from("Peeks")
+      .insert({
+        ...post,
+        image_url: publicURLData.publicUrl,
+        user_email: userEmail,
+      });
+
+    if (error) {
+      console.error('Database error:', error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    
+    console.log('Success:', data);
+    return data;
+  } catch (error) {
+    console.error('Full error:', error);
+    throw error;
+  }
 };
 
 export const SharePeek = () => {
   const [title, setTitle] = useState<string>("");
   const [content, setContent] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const { user } = useAuth();
 
   const { mutate, isPending, isError, isSuccess } = useMutation({
@@ -55,15 +136,22 @@ export const SharePeek = () => {
       setTitle("");
       setContent("");
       setSelectedFile(null);
+      setErrorMessage("");
       // Reset file input
       const fileInput = document.getElementById("image") as HTMLInputElement;
       if (fileInput) fileInput.value = "";
     },
+    onError: (error) => {
+      console.error('Mutation error:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Unknown error occurred');
+    }
   });
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedFile) return;
+    
+    setErrorMessage(""); // Clear previous errors
     
     mutate({
       post: { 
@@ -77,7 +165,22 @@ export const SharePeek = () => {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        setErrorMessage("File too large. Please choose a smaller image (under 10MB).");
+        return;
+      }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        setErrorMessage("Please select an image file.");
+        return;
+      }
+      
+      setSelectedFile(file);
+      setErrorMessage(""); // Clear any previous error
     }
   };
 
@@ -150,9 +253,14 @@ export const SharePeek = () => {
               </label>
             </div>
             {selectedFile && (
-              <p className="text-green-600 text-xs mt-2 font-medium">
-                ✅ Photo selected: {selectedFile.name}
-              </p>
+              <div className="mt-2">
+                <p className="text-green-600 text-xs font-medium">
+                  ✅ Photo selected: {selectedFile.name}
+                </p>
+                <p className="text-gray-500 text-xs">
+                  Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
             )}
           </div>
 
@@ -177,8 +285,9 @@ export const SharePeek = () => {
 
           {/* Status Messages */}
           {isError && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
-              <p className="text-red-600 font-medium">😞 Error creating post. Please try again!</p>
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+              <p className="text-red-600 font-medium text-sm">😞 Error creating post:</p>
+              <p className="text-red-500 text-xs mt-1 break-words">{errorMessage}</p>
             </div>
           )}
           
