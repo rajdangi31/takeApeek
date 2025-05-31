@@ -1,71 +1,142 @@
-// Add this to your main App.tsx or main.tsx file
+const CACHE_NAME = 'takeapeek-v1';
+const urlsToCache = [
+  '/',
+  '/static/js/bundle.js',
+  '/static/css/main.css',
+  '/manifest.json'
+];
 
-export const registerServiceWorker = async () => {
-  if ('serviceWorker' in navigator) {
-    try {
-      console.log('🔄 Registering service worker...');
-      
-      // Try different paths - Vercel sometimes needs explicit paths
-      const swPaths = ['/sw.js', './sw.js', '/public/sw.js'];
-      let registration = null;
-      
-      for (const path of swPaths) {
-        try {
-          console.log(`🔄 Trying SW path: ${path}`);
-          registration = await navigator.serviceWorker.register(path, {
-            scope: '/' // Ensure scope is root
-          });
-          console.log(`✅ Service worker registered successfully with path: ${path}`);
-          break;
-        } catch (err) {
-          console.log(`❌ Failed with path ${path}:`, err);
-          continue;
-        }
-      }
-      
-      if (!registration) {
-        throw new Error('Failed to register service worker with any path');
-      }
-
-      // Wait for the service worker to be ready
-      await navigator.serviceWorker.ready;
-      console.log('✅ Service worker is ready');
-
-      // Check if there's an active service worker
-      if (registration.active) {
-        console.log('✅ Service worker is active');
-      } else {
-        console.log('🔄 Waiting for service worker to activate...');
-        // Wait for activation
-        await new Promise((resolve) => {
-          const checkActive = () => {
-            if (registration.active) {
-              resolve(registration.active);
-            } else {
-              setTimeout(checkActive, 100);
-            }
-          };
-          checkActive();
+// Install event - cache resources
+self.addEventListener('install', (event) => {
+  console.log('🔧 Service worker installing...');
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.log('📦 Caching resources...');
+        // Only cache resources that exist, skip others
+        return cache.addAll(urlsToCache).catch(err => {
+          console.warn('⚠️ Some resources failed to cache:', err);
+          // Don't fail the install if some resources are missing
+          return Promise.resolve();
         });
-        console.log('✅ Service worker activated');
+      })
+  );
+  // Force the waiting service worker to become the active service worker
+  self.skipWaiting();
+});
+
+// Activate event
+self.addEventListener('activate', (event) => {
+  console.log('✅ Service worker activating...');
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('🗑️ Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+  // Ensure the service worker takes control immediately
+  self.clients.claim();
+});
+
+// Fetch event - serve from cache when offline
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => {
+        // Return cached version or fetch from network
+        return response || fetch(event.request).catch(err => {
+          console.warn('🌐 Network fetch failed:', err);
+          // Return a basic response for failed requests
+          return new Response('Offline', { status: 503 });
+        });
+      })
+  );
+});
+
+// Push event - handle incoming push notifications
+self.addEventListener('push', (event) => {
+  console.log('📬 Push notification received:', event);
+  
+  let notificationData = {
+    title: 'Take A Peek',
+    body: 'New notification from Take A Peek',
+    icon: '/favicon.ico', // Use favicon as fallback since icon-192.png is missing
+    badge: '/favicon.ico',
+    vibrate: [100, 50, 100],
+    data: {
+      dateOfArrival: Date.now(),
+      primaryKey: 1
+    },
+    actions: [
+      {
+        action: 'explore',
+        title: 'View'
+      },
+      {
+        action: 'close',
+        title: 'Close'
       }
+    ]
+  };
 
-      return registration;
-    } catch (error) {
-      console.error('❌ Service worker registration failed:', error);
-      throw error;
+  // Parse push data if available
+  if (event.data) {
+    try {
+      const pushData = event.data.json();
+      notificationData = { ...notificationData, ...pushData };
+    } catch (err) {
+      console.warn('⚠️ Failed to parse push data, using text:', event.data.text());
+      notificationData.body = event.data.text();
     }
-  } else {
-    throw new Error('Service workers not supported');
   }
-};
 
-// Call this when your app starts
-export const initializeApp = async () => {
-  try {
-    await registerServiceWorker();
-    console.log('🎉 App initialized with service worker');
-  } catch (error) {
-    console.error('❌ App initialization failed:', error);
+  event.waitUntil(
+    self.registration.showNotification(notificationData.title, notificationData)
+  );
+});
+
+// Notification click event
+self.addEventListener('notificationclick', (event) => {
+  console.log('🔔 Notification clicked:', event);
+  event.notification.close();
+  
+  if (event.action === 'explore') {
+    // Open the app
+    event.waitUntil(
+      clients.matchAll({ type: 'window' }).then((clientList) => {
+        // If the app is already open, focus it
+        for (let client of clientList) {
+          if (client.url === self.location.origin && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        // Otherwise open a new window
+        if (clients.openWindow) {
+          return clients.openWindow('/');
+        }
+      })
+    );
   }
-};
+});
+
+// Background sync for offline actions
+self.addEventListener('sync', (event) => {
+  console.log('🔄 Background sync triggered:', event.tag);
+  if (event.tag === 'background-sync') {
+    event.waitUntil(doBackgroundSync());
+  }
+});
+
+function doBackgroundSync() {
+  console.log('🔄 Performing background sync...');
+  // Handle any offline actions when connection is restored
+  return Promise.resolve();
+}
+
+console.log('🚀 Service worker loaded successfully');
