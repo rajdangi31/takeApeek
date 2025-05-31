@@ -192,63 +192,74 @@ export const BestiesList = () => {
   });
 
   const acceptReq = useMutation<void, Error, number>({
-    mutationFn: async (rowId) => {
-      if (!user) throw new Error("Not signed in");
+  mutationFn: async (rowId) => {
+    if (!user) throw new Error("Not signed in");
 
-      // Get the pending request details
-      const { data: requestData, error: fetchError } = await supabase
-        .from("besties")
-        .select("*")
-        .eq("id", rowId)
-        .eq("status", "pending")
-        .single();
+    // Get the pending request details
+    const { data: requestData, error: fetchError } = await supabase
+      .from("besties")
+      .select("*")
+      .eq("id", rowId)
+      .eq("status", "pending")
+      .single();
 
-      if (fetchError || !requestData) {
-        throw new Error("Friend request not found");
-      }
+    if (fetchError || !requestData) {
+      throw new Error("Friend request not found");
+    }
 
-      // Verify this is a request TO the current user
-      if (requestData.bestie_id !== user.id) {
-        throw new Error("You can only accept requests sent to you");
-      }
+    // Verify this is a request TO the current user
+    if (requestData.bestie_id !== user.id) {
+      throw new Error("You can only accept requests sent to you");
+    }
 
-      // Check if accepting would exceed the limit for either user
-      const currentAccepted = accepted.length;
-      if (currentAccepted >= MAX_BESTIES) {
-        throw new Error(`You already have the maximum of ${MAX_BESTIES} besties`);
-      }
+    // Check if accepting would exceed the limit for either user
+    const currentAccepted = accepted.length;
+    if (currentAccepted >= MAX_BESTIES) {
+      throw new Error(`You already have the maximum of ${MAX_BESTIES} besties`);
+    }
 
-      // Update the original request to accepted
-      const { error: updateError } = await supabase
-        .from("besties")
-        .update({ status: "accepted" })
-        .eq("id", rowId);
+    // Update the original request to accepted
+    const { error: updateError } = await supabase
+      .from("besties")
+      .update({ status: "accepted" })
+      .eq("id", rowId);
 
-      if (updateError) {
-        throw new Error(`Failed to accept request: ${updateError.message}`);
-      }
+    if (updateError) {
+      throw new Error(`Failed to accept request: ${updateError.message}`);
+    }
 
-      // Create the reciprocal relationship so both users see each other as friends
-      const { error: reciprocalError } = await supabase
-        .from("besties")
-        .insert({
-          user_id: requestData.bestie_id, // The person who accepted (current user)
-          bestie_id: requestData.user_id, // The person who sent the request
-          status: "accepted",
-          avatar_url: user.user_metadata?.avatar_url ?? "/avatar-placeholder.png",
-          user_name: user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "Unknown",
-        });
+    // 🔥 FIX: Get the requester's actual profile data
+    const { data: requesterProfile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("user_name, avatar_url, email")
+      .eq("id", requestData.user_id) // The person who sent the request
+      .single();
 
-      if (reciprocalError) {
-        console.error("Failed to create reciprocal relationship:", reciprocalError);
-        // Don't throw here - the main acceptance worked
-      }
+    if (profileError) {
+      console.error("Failed to fetch requester profile:", profileError);
+    }
 
-      console.log("Friend request accepted and reciprocal relationship created");
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: bestiesKey(user?.id) }),
-  });
+    // Create the reciprocal relationship with the REQUESTER's data
+    const { error: reciprocalError } = await supabase
+      .from("besties")
+      .insert({
+        user_id: requestData.bestie_id, // The person who accepted (current user)
+        bestie_id: requestData.user_id, // The person who sent the request
+        status: "accepted",
+        // 🔥 Use the REQUESTER's data, not your own
+        avatar_url: requesterProfile?.avatar_url ?? "/avatar-placeholder.png",
+        user_name: requesterProfile?.user_name ?? requesterProfile?.email?.split("@")[0] ?? "Unknown",
+      });
 
+    if (reciprocalError) {
+      console.error("Failed to create reciprocal relationship:", reciprocalError);
+      // Don't throw here - the main acceptance worked
+    }
+
+    console.log("Friend request accepted and reciprocal relationship created");
+  },
+  onSuccess: () => qc.invalidateQueries({ queryKey: bestiesKey(user?.id) }),
+});
   const removeReq = useMutation<void, Error, number>({
     mutationFn: async (rowId) => {
       if (!user) throw new Error("Not signed in");
