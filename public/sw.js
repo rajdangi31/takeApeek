@@ -1,81 +1,71 @@
-const CACHE_NAME = 'takeapeek-v1';
-const urlsToCache = [
-  '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/manifest.json'
-];
+// Add this to your main App.tsx or main.tsx file
 
-// Install event - cache resources
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
-  );
-});
-
-// Fetch event - serve from cache when offline
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
+export const registerServiceWorker = async () => {
+  if ('serviceWorker' in navigator) {
+    try {
+      console.log('🔄 Registering service worker...');
+      
+      // Try different paths - Vercel sometimes needs explicit paths
+      const swPaths = ['/sw.js', './sw.js', '/public/sw.js'];
+      let registration = null;
+      
+      for (const path of swPaths) {
+        try {
+          console.log(`🔄 Trying SW path: ${path}`);
+          registration = await navigator.serviceWorker.register(path, {
+            scope: '/' // Ensure scope is root
+          });
+          console.log(`✅ Service worker registered successfully with path: ${path}`);
+          break;
+        } catch (err) {
+          console.log(`❌ Failed with path ${path}:`, err);
+          continue;
+        }
       }
-    )
-  );
-});
-
-// Push event - handle incoming push notifications
-self.addEventListener('push', (event) => {
-  const options = {
-    body: event.data ? event.data.text() : 'New notification from Take A Peek',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
-    vibrate: [100, 50, 100],
-    data: {
-      dateOfArrival: Date.now(),
-      primaryKey: 1
-    },
-    actions: [
-      {
-        action: 'explore',
-        title: 'View',
-        icon: '/icon-192.png'
-      },
-      {
-        action: 'close',
-        title: 'Close',
-        icon: '/icon-192.png'
+      
+      if (!registration) {
+        throw new Error('Failed to register service worker with any path');
       }
-    ]
-  };
 
-  event.waitUntil(
-    self.registration.showNotification('Take A Peek', options)
-  );
-});
+      // Wait for the service worker to be ready
+      await navigator.serviceWorker.ready;
+      console.log('✅ Service worker is ready');
 
-// Notification click event
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
+      // Check if there's an active service worker
+      if (registration.active) {
+        console.log('✅ Service worker is active');
+      } else {
+        console.log('🔄 Waiting for service worker to activate...');
+        // Wait for activation
+        await new Promise((resolve) => {
+          const checkActive = () => {
+            if (registration.active) {
+              resolve(registration.active);
+            } else {
+              setTimeout(checkActive, 100);
+            }
+          };
+          checkActive();
+        });
+        console.log('✅ Service worker activated');
+      }
 
-  if (event.action === 'explore') {
-    // Open the app
-    event.waitUntil(
-      clients.openWindow('/')
-    );
+      return registration;
+    } catch (error) {
+      console.error('❌ Service worker registration failed:', error);
+      throw error;
+    }
+  } else {
+    throw new Error('Service workers not supported');
   }
-});
+};
 
-// Background sync for offline actions
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'background-sync') {
-    event.waitUntil(doBackgroundSync());
+// Call this when your app starts
+export const initializeApp = async () => {
+  try {
+    await registerServiceWorker();
+    console.log('🎉 App initialized with service worker');
+  } catch (error) {
+    console.error('❌ App initialization failed:', error);
   }
-});
-
-function doBackgroundSync() {
-  // Handle any offline actions when connection is restored
-  return Promise.resolve();
-}
+};
