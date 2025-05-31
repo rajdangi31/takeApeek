@@ -48,13 +48,39 @@ export const BestiesList = () => {
     enabled: !!user,
     queryFn: async (): Promise<BestieRow[]> => {
       if (!user) return [];
-      const { data, error } = await supabase
+      
+      // Get all relationships involving the current user
+      const { data: relationships, error: relError } = await supabase
         .from("besties")
         .select("*")
         .or(`user_id.eq.${user.id},bestie_id.eq.${user.id}`);
 
-      if (error) throw error;
-      return (data as BestieRow[]) ?? [];
+      if (relError) throw relError;
+      if (!relationships) return [];
+
+      // For each relationship, we need to get the actual friend's profile data
+      const enrichedRows = await Promise.all(
+        relationships.map(async (row) => {
+          // Determine who the friend is (not the current user)
+          const friendId = row.user_id === user.id ? row.bestie_id : row.user_id;
+          
+          // Get the friend's actual profile data
+          const { data: friendProfile } = await supabase
+            .from("user_profiles")
+            .select("user_name, avatar_url")
+            .eq("id", friendId)
+            .single();
+
+          return {
+            ...row,
+            // Use the actual friend's data, not what's stored in the relationship
+            user_name: friendProfile?.user_name || row.user_name,
+            avatar_url: friendProfile?.avatar_url || row.avatar_url,
+          };
+        })
+      );
+
+      return enrichedRows as BestieRow[];
     },
   });
 
@@ -275,19 +301,27 @@ export const BestiesList = () => {
     (r) => r.user_id === user?.id && r.status === "pending"
   );
   
-  // Only show unique accepted friendships (avoid duplicates from bidirectional relationships)
+  // Clean accepted friends logic - avoid duplicates and show correct friend info
   const acceptedMap = new Map();
+  
   rows
     .filter((r) => r.status === "accepted")
     .forEach((r) => {
+      // Determine who the friend is (not the current user)
       const friendId = r.user_id === user?.id ? r.bestie_id : r.user_id;
-      const friendData = r.user_id === user?.id ? 
-        { id: r.id, user_name: r.user_name, avatar_url: r.avatar_url } :
-        { id: r.id, user_name: r.user_name, avatar_url: r.avatar_url };
       
-      if (!acceptedMap.has(friendId)) {
-        acceptedMap.set(friendId, { ...friendData, friendId });
+      // Skip if we already have this friend (avoid duplicates from bidirectional relationships)
+      if (acceptedMap.has(friendId)) {
+        return;
       }
+
+      // Now the user_name and avatar_url should be the friend's actual data
+      acceptedMap.set(friendId, {
+        id: r.id,
+        friendId: friendId,
+        user_name: r.user_name,
+        avatar_url: r.avatar_url,
+      });
     });
   
   const accepted = Array.from(acceptedMap.values());
