@@ -1,119 +1,193 @@
-import { useState, useEffect } from 'react';
-import { supabase } from './supabase-client'; // Adjust path to your supabase client
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "./supabase-client";
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                           */
+/* ------------------------------------------------------------------ */
+
+const VAPID_PUBLIC =
+  "BET5ATiCATxFgwqYU90xcd9Yn6IUYD4iXpofAMiTg468njArKR5tVBtZSS6arzrNIqdNn2o8U1ryikwxN7_QBGQ";
+
+/** Convert a URL-safe Base-64 key to the Uint8Array Push API expects */
+function urlBase64ToUint8Array(base64: string) {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const base64Safe = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64Safe);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+/** Check for **minimum** Push-API support (https + SW + PushManager) */
+function hasPushSupport() {
+  const secureContext =
+    location.protocol === "https:" ||
+    location.hostname === "localhost" ||
+    location.hostname === "127.0.0.1";
+  return (
+    secureContext &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    "Notification" in window
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Hook                                                              */
+/* ------------------------------------------------------------------ */
 
 export const usePushNotifications = (userId?: string) => {
+  /* ---------- state ---------- */
   const [isSupported, setIsSupported] = useState(false);
-  const [subscription, setSubscription] = useState<PushSubscription | null>(null);
+  const [subscription, setSubscription] = useState<PushSubscription | null>(
+    null
+  );
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [lastError, setLastError] = useState<unknown>(null);
 
+  /* ---------- initial feature-detection ---------- */
   useEffect(() => {
-    setIsSupported('serviceWorker' in navigator && 'PushManager' in window);
+    setIsSupported(hasPushSupport());
   }, []);
 
-  const subscribeUser = async () => {
-    if (!isSupported || !userId) return;
+  /* ---------- helper to read existing sub ---------- */
+  const checkSubscription = useCallback(async () => {
+    if (!isSupported) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const current = await reg.pushManager.getSubscription();
+      setSubscription(current);
+      setIsSubscribed(Boolean(current));
+    } catch (err) {
+      console.error("⚠️  checkSubscription failed:", err);
+      setLastError(err);
+    }
+  }, [isSupported]);
+
+  useEffect(() => {
+    checkSubscription();
+  }, [checkSubscription]);
+
+  /* ---------- subscribe ---------- */
+  const subscribeUser = useCallback(async () => {
+    console.log("🔔 subscribeUser called", { isSupported, userId });
+    
+    // Early return with proper loading reset
+    if (!isSupported) {
+      console.log("❌ Push not supported");
+      return;
+    }
+    
+    if (!userId) {
+      console.log("❌ No userId provided");
+      setLastError(new Error("User ID is required"));
+      return;
+    }
 
     setLoading(true);
+    setLastError(null);
+
     try {
-      const registration = await navigator.serviceWorker.ready;
+      console.log("🔄 Getting service worker...");
       
-      // You'll need to generate VAPID keys for production
-      // For now, this is a placeholder - we'll add the actual key later
-      const vapidPublicKey = 'BET5ATiCATxFgwqYU90xcd9Yn6IUYD4iXpofAMiTg468njArKR5tVBtZSS6arzrNIqdNn2o8U1ryikwxN7_QBGQ' ;
-      
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Service worker timeout")), 10000);
       });
+      
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        timeoutPromise
+      ]) as ServiceWorkerRegistration;
+      
+      console.log("✅ Service worker ready:", reg);
 
-      // Save subscription to Supabase
+      /** Request browser permission first */
+      console.log("🔔 Requesting notification permission...");
+      const permission = await Notification.requestPermission();
+      console.log("🔔 Permission result:", permission);
+      
+      if (permission !== "granted") {
+        throw new Error(`Notification permission was ${permission}`);
+      }
+
+      console.log("🔔 Subscribing to push manager...");
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
+      });
+      
+      console.log("✅ Push subscription created:", sub);
+
+      /* Store in DB */
+      console.log("💾 Saving to database...");
       const { error } = await supabase
-        .from('user_profiles')
+        .from("user_profiles")
         .update({
-          push_subscription: subscription.toJSON(),
-          push_enabled: true
+          push_subscription: sub.toJSON(),
+          push_enabled: true,
         })
-        .eq('id', userId);
+        .eq("id", userId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ Database error:", error);
+        throw error;
+      }
+      
+      console.log("✅ Saved to database successfully");
 
-      setSubscription(subscription);
+      /* Local state */
+      setSubscription(sub);
       setIsSubscribed(true);
-    } catch (error) {
-      console.error('Failed to subscribe user:', error);
+      
+      console.log("🎉 Subscription complete!");
+      
+    } catch (err) {
+      console.error("⚠️  subscribeUser failed:", err);
+      setLastError(err);
     } finally {
+      console.log("🔄 Setting loading to false");
       setLoading(false);
     }
-  };
+  }, [isSupported, userId]);
 
-  const unsubscribeUser = async () => {
+  /* ---------- unsubscribe ---------- */
+  const unsubscribeUser = useCallback(async () => {
     if (!subscription || !userId) return;
-
     setLoading(true);
+    setLastError(null);
+
     try {
       await subscription.unsubscribe();
 
-      // Update Supabase
       const { error } = await supabase
-        .from('user_profiles')
+        .from("user_profiles")
         .update({
           push_subscription: null,
-          push_enabled: false
+          push_enabled: false,
         })
-        .eq('id', userId);
+        .eq("id", userId);
 
       if (error) throw error;
 
       setSubscription(null);
       setIsSubscribed(false);
-    } catch (error) {
-      console.error('Failed to unsubscribe user:', error);
+    } catch (err) {
+      console.error("⚠️  unsubscribeUser failed:", err);
+      setLastError(err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const checkSubscription = async () => {
-    if (!isSupported) return;
-
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      
-      setSubscription(subscription);
-      setIsSubscribed(!!subscription);
-    } catch (error) {
-      console.error('Failed to check subscription:', error);
-    }
-  };
-
-  useEffect(() => {
-    checkSubscription();
-  }, [isSupported]);
+  }, [subscription, userId]);
 
   return {
+    /* state */
     isSupported,
     isSubscribed,
     loading,
+    lastError,
+    /* actions */
     subscribeUser,
     unsubscribeUser,
-    checkSubscription
+    checkSubscription,
   };
 };
-
-// Helper function to convert VAPID key
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
