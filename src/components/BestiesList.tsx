@@ -61,12 +61,6 @@ export const BestiesList = () => {
     mutationFn: async (email) => {
       if (!user) throw new Error("Not signed in");
 
-      // Check bestie limit (max 4 accepted besties)
-      const acceptedCount = accepted.length;
-      if (acceptedCount >= 4) {
-        throw new Error("You can have a maximum of 4 besties. Remove someone first to add a new bestie.");
-      }
-
       // Normalize email to lowercase for consistent searching
       const normalizedEmail = email.toLowerCase().trim();
       
@@ -275,9 +269,7 @@ export const BestiesList = () => {
     <div className="max-w-lg mx-auto mt-8 bg-white shadow-xl rounded-xl p-6 space-y-8">
       {/* ============================= Besties ======================== */}
       <section>
-        <h2 className="text-xl font-bold text-pink-600 mb-3">
-          Besties ({accepted.length}/5)
-        </h2>
+        <h2 className="text-xl font-bold text-pink-600 mb-3">Besties</h2>
         {accepted.length === 0 && (
           <p className="text-sm text-gray-500">No friends yet.</p>
         )}
@@ -367,10 +359,9 @@ export const BestiesList = () => {
             className="flex-grow border border-pink-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
           />
           <button
-            disabled={!emailToAdd || addReq.isPending || accepted.length >= 5}
+            disabled={!emailToAdd || addReq.isPending}
             onClick={() => addReq.mutate(emailToAdd)}
             className="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 disabled:opacity-50"
-            title={accepted.length >= 5 ? "Maximum 5 besties allowed" : ""}
           >
             {addReq.isPending ? "Adding…" : "Add"}
           </button>
@@ -378,11 +369,6 @@ export const BestiesList = () => {
         {addReq.isError && (
           <p className="text-xs text-red-500 mt-1">
             {addReq.error?.message}
-          </p>
-        )}
-        {accepted.length >= 5 && (
-          <p className="text-xs text-amber-600 mt-1">
-            Maximum besties reached (5/5). Remove someone to add a new bestie.
           </p>
         )}
       </section>
