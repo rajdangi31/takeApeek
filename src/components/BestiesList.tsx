@@ -63,14 +63,14 @@ export const BestiesList = () => {
 
           const { data: friendProfile } = await supabase
             .from("user_profiles")
-            .select("user_name, avatar_url")
+            .select("email, avatar_url")
             .eq("id", friendId)
             .single();
 
           return {
             ...row,
-            // Always show the friend's info, not the stored info which might be wrong
-            user_name: friendProfile?.user_name || "Unknown User",
+            // Use email as username, show the friend's info
+            user_name: friendProfile?.email || "Unknown User",
             avatar_url: friendProfile?.avatar_url || "/avatar-placeholder.png",
           };
         })
@@ -120,20 +120,16 @@ export const BestiesList = () => {
         else throw new Error("Request already exists");
       }
 
-      // Get the current user's profile data to store as requester info
-      const { data: currentUserProfile } = await supabase
-        .from("user_profiles")
-        .select("user_name, avatar_url")
-        .eq("id", user.id)
-        .single();
+      // Get the current user's email for storage
+      const currentUserEmail = user.email || "unknown@example.com";
 
       const { error } = await supabase.from("besties").insert({
         user_id: user.id,
         bestie_id: found.id,
         status: "pending",
-        // Store the REQUESTER's info (current user), not the recipient's
-        avatar_url: currentUserProfile?.avatar_url ?? "/avatar-placeholder.png",
-        user_name: currentUserProfile?.user_name ?? user.email?.split("@")[0] ?? "Unknown",
+        // Store placeholder data since we fetch fresh data in the query
+        avatar_url: "/avatar-placeholder.png",
+        user_name: currentUserEmail,
       });
       if (error) throw error;
     },
@@ -165,20 +161,16 @@ export const BestiesList = () => {
         .update({ status: "accepted" })
         .eq("id", rowId);
 
-      // Get current user's profile to store as requester info in the reciprocal relationship
-      const { data: currentUserProfile } = await supabase
-        .from("user_profiles")
-        .select("user_name, avatar_url")
-        .eq("id", user.id)
-        .single();
+      // Get current user's email for the reciprocal relationship
+      const currentUserEmail = user.email || "unknown@example.com";
 
       await supabase.from("besties").insert({
         user_id: request.bestie_id, // Current user becomes the "requester" in reciprocal relationship
         bestie_id: request.user_id, // Original requester becomes the "recipient"
         status: "accepted",
-        // Store current user's info as the requester
-        avatar_url: currentUserProfile?.avatar_url ?? "/avatar-placeholder.png",
-        user_name: currentUserProfile?.user_name ?? user.email?.split("@")[0] ?? "Unknown",
+        // Store placeholder data since we fetch fresh data in the query
+        avatar_url: "/avatar-placeholder.png",
+        user_name: currentUserEmail,
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: bestiesKey(user?.id) }),
