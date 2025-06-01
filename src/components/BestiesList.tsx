@@ -69,8 +69,9 @@ export const BestiesList = () => {
 
           return {
             ...row,
-            user_name: friendProfile?.user_name || row.user_name,
-            avatar_url: friendProfile?.avatar_url || row.avatar_url,
+            // Always show the friend's info, not the stored info which might be wrong
+            user_name: friendProfile?.user_name || "Unknown User",
+            avatar_url: friendProfile?.avatar_url || "/avatar-placeholder.png",
           };
         })
       );
@@ -119,12 +120,20 @@ export const BestiesList = () => {
         else throw new Error("Request already exists");
       }
 
+      // Get the current user's profile data to store as requester info
+      const { data: currentUserProfile } = await supabase
+        .from("user_profiles")
+        .select("user_name, avatar_url")
+        .eq("id", user.id)
+        .single();
+
       const { error } = await supabase.from("besties").insert({
         user_id: user.id,
         bestie_id: found.id,
         status: "pending",
-        avatar_url: found.avatar_url ?? "/avatar-placeholder.png",
-        user_name: found.user_name ?? normalized.split("@")[0],
+        // Store the REQUESTER's info (current user), not the recipient's
+        avatar_url: currentUserProfile?.avatar_url ?? "/avatar-placeholder.png",
+        user_name: currentUserProfile?.user_name ?? user.email?.split("@")[0] ?? "Unknown",
       });
       if (error) throw error;
     },
@@ -156,21 +165,20 @@ export const BestiesList = () => {
         .update({ status: "accepted" })
         .eq("id", rowId);
 
-      const { data: requester } = await supabase
+      // Get current user's profile to store as requester info in the reciprocal relationship
+      const { data: currentUserProfile } = await supabase
         .from("user_profiles")
-        .select("user_name, avatar_url, email")
-        .eq("id", request.user_id)
+        .select("user_name, avatar_url")
+        .eq("id", user.id)
         .single();
 
       await supabase.from("besties").insert({
-        user_id: request.bestie_id,
-        bestie_id: request.user_id,
+        user_id: request.bestie_id, // Current user becomes the "requester" in reciprocal relationship
+        bestie_id: request.user_id, // Original requester becomes the "recipient"
         status: "accepted",
-        avatar_url: requester?.avatar_url ?? "/avatar-placeholder.png",
-        user_name:
-          requester?.user_name ??
-          requester?.email?.split("@")[0] ??
-          "Unknown",
+        // Store current user's info as the requester
+        avatar_url: currentUserProfile?.avatar_url ?? "/avatar-placeholder.png",
+        user_name: currentUserProfile?.user_name ?? user.email?.split("@")[0] ?? "Unknown",
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: bestiesKey(user?.id) }),
