@@ -28,6 +28,7 @@ export interface BestieRow {
 /* ------------------------------------------------------------------ */
 
 const bestiesKey = (uid?: string): QueryKey => ["besties", uid ?? "none"];
+const MAX_BESTIES = 5;
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -38,6 +39,7 @@ export const BestiesList = () => {
   const qc = useQueryClient();
   const [emailToAdd, setEmailToAdd] = useState("");
 
+  /* ---------------- Fetch rows ---------------- */
   const {
     data: rows = [],
     isLoading,
@@ -47,209 +49,186 @@ export const BestiesList = () => {
     enabled: !!user,
     queryFn: async (): Promise<BestieRow[]> => {
       if (!user) return [];
-      const { data, error } = await supabase
+      const { data: relationships, error: relError } = await supabase
         .from("besties")
         .select("*")
         .or(`user_id.eq.${user.id},bestie_id.eq.${user.id}`);
 
-      if (error) throw error;
-      return (data as BestieRow[]) ?? [];
+      if (relError) throw relError;
+      if (!relationships) return [];
+
+      const enrichedRows = await Promise.all(
+        relationships.map(async (row) => {
+          const friendId = row.user_id === user.id ? row.bestie_id : row.user_id;
+
+          const { data: friendProfile } = await supabase
+            .from("user_profiles")
+            .select("user_name, avatar_url")
+            .eq("id", friendId)
+            .single();
+
+          return {
+            ...row,
+            user_name: friendProfile?.user_name || row.user_name,
+            avatar_url: friendProfile?.avatar_url || row.avatar_url,
+          };
+        })
+      );
+
+      return enrichedRows as BestieRow[];
     },
   });
 
+  /* ---------------- Send request ---------------- */
   const addReq = useMutation<void, Error, string>({
     mutationFn: async (email) => {
       if (!user) throw new Error("Not signed in");
+      if (accepted.length >= MAX_BESTIES)
+        throw new Error(`Max ${MAX_BESTIES} besties reached`);
 
-      // Normalize email to lowercase for consistent searching
-      const normalizedEmail = email.toLowerCase().trim();
-      
-      console.log("Searching for email:", normalizedEmail);
+      const normalized = email.toLowerCase().trim();
 
-      // Try different approaches to find the user
-      let userData = null;
-      let searchError = null;
-
-      // Approach 1: Try exact match with normalized email
-      const { data: u1, error: e1 } = await supabase
+      let { data: found } = await supabase
         .from("user_profiles")
         .select("id, avatar_url, user_name, email")
-        .eq("email", normalizedEmail)
+        .eq("email", normalized)
         .maybeSingle();
 
-      if (e1) {
-        console.error("Database error (approach 1):", e1);
-        searchError = e1;
-      } else if (u1) {
-        userData = u1;
-        console.log("Found user (approach 1):", u1);
-      }
-
-      // Approach 2: If not found, try case-insensitive search
-      if (!userData) {
-        const { data: u2, error: e2 } = await supabase
+      if (!found) {
+        const res = await supabase
           .from("user_profiles")
           .select("id, avatar_url, user_name, email")
-          .ilike("email", normalizedEmail)
+          .ilike("email", normalized)
           .maybeSingle();
-
-        if (e2) {
-          console.error("Database error (approach 2):", e2);
-          searchError = e2;
-        } else if (u2) {
-          userData = u2;
-          console.log("Found user (approach 2):", u2);
-        }
+        found = res.data;
       }
+      if (!found) throw new Error("No user with that email");
+      if (found.id === user.id) throw new Error("Cannot add yourself");
 
-      // Approach 3: If still not found, try searching in auth.users table
-      if (!userData) {
-        const { data: authUsers, error: e3 } = await supabase.auth.admin.listUsers();
-        
-        if (e3) {
-          console.error("Auth users error:", e3);
-        } else {
-          const authUser = authUsers.users.find(u => 
-            u.email?.toLowerCase() === normalizedEmail
-          );
-          
-          if (authUser) {
-            console.log("Found in auth.users:", authUser);
-            // Check if this user has a profile
-            const { data: profile, error: profileError } = await supabase
-              .from("user_profiles")
-              .select("id, avatar_url, user_name, email")
-              .eq("id", authUser.id)
-              .maybeSingle();
-            
-            if (profile) {
-              userData = profile;
-              console.log("Found profile for auth user:", profile);
-            } else {
-              console.log("Auth user exists but no profile found");
-            }
-          }
-        }
-      }
-
-      // If we have a database error, throw it
-      if (searchError) {
-        throw new Error(`Database error: ${searchError.message}`);
-      }
-
-      // If no user found, provide detailed error
-      if (!userData) {
-        // Check RLS permissions by trying to get current user's profile
-        const { data: currentUserProfile, error: currentUserError } = await supabase
-          .from("user_profiles")
-          .select("email")
-          .eq("id", user.id)
-          .single();
-        
-        console.log("Current user profile check:", { currentUserProfile, currentUserError });
-        
-        // Try a different approach - search without RLS restrictions
-        const { data: allUsers, error: allUsersError } = await supabase
-          .from("user_profiles")
-          .select("email, id")
-          .limit(5);
-        
-        console.log("All users query:", { allUsers, allUsersError });
-        
-        let errorMessage = `No user found with email: ${normalizedEmail}.`;
-        
-        if (allUsersError) {
-          errorMessage += ` Database access error: ${allUsersError.message}`;
-        } else if (!allUsers || allUsers.length === 0) {
-          errorMessage += ` No users found in database (possible RLS issue).`;
-        } else {
-          const availableEmails = allUsers.map(u => u.email).join(", ");
-          errorMessage += ` Available emails: ${availableEmails}`;
-        }
-        
-        throw new Error(errorMessage);
-      }
-
-      // Check if friendship already exists
-      const { data: existingFriendship } = await supabase
+      const { data: existing } = await supabase
         .from("besties")
-        .select("id")
-        .or(`and(user_id.eq.${user.id},bestie_id.eq.${userData.id}),and(user_id.eq.${userData.id},bestie_id.eq.${user.id})`)
+        .select("status")
+        .or(
+          `and(user_id.eq.${user.id},bestie_id.eq.${found.id}),and(user_id.eq.${found.id},bestie_id.eq.${user.id})`
+        )
         .maybeSingle();
 
-      if (existingFriendship) {
-        throw new Error("Friendship already exists with this user");
+      if (existing) {
+        if (existing.status === "accepted")
+          throw new Error("Already besties");
+        else throw new Error("Request already exists");
       }
 
-      // Check if trying to add yourself
-      if (userData.id === user.id) {
-        throw new Error("You cannot add yourself as a bestie");
-      }
-
-      const avatar_url = userData.avatar_url ?? "/avatar-placeholder.png";
-      const user_name = userData.user_name ?? normalizedEmail.split("@")[0];
-
-      console.log("Creating friendship with:", { 
-        user_id: user.id, 
-        bestie_id: userData.id, 
-        avatar_url, 
-        user_name 
-      });
-
-      const { error: insertError } = await supabase.from("besties").insert({
+      const { error } = await supabase.from("besties").insert({
         user_id: user.id,
-        bestie_id: userData.id,
+        bestie_id: found.id,
         status: "pending",
-        avatar_url,
-        user_name,
+        avatar_url: found.avatar_url ?? "/avatar-placeholder.png",
+        user_name: found.user_name ?? normalized.split("@")[0],
       });
-
-      if (insertError) {
-        console.error("Insert error:", insertError);
-        throw new Error(`Failed to create friendship: ${insertError.message}`);
-      }
-
-      console.log("Friendship created successfully");
+      if (error) throw error;
     },
     onSuccess: () => {
       setEmailToAdd("");
       qc.invalidateQueries({ queryKey: bestiesKey(user?.id) });
     },
-    onError: (error) => {
-      console.error("Add bestie error:", error);
-    }
   });
 
+  /* ---------------- Accept request ---------------- */
   const acceptReq = useMutation<void, Error, number>({
     mutationFn: async (rowId) => {
-      const { error } = await supabase
+      if (!user) throw new Error("Not signed in");
+
+      const { data: request } = await supabase
+        .from("besties")
+        .select("*")
+        .eq("id", rowId)
+        .single();
+
+      if (!request || request.bestie_id !== user.id)
+        throw new Error("Not your request");
+
+      if (accepted.length >= MAX_BESTIES)
+        throw new Error(`Max ${MAX_BESTIES} besties reached`);
+
+      await supabase
         .from("besties")
         .update({ status: "accepted" })
         .eq("id", rowId);
-      if (error) throw error;
+
+      const { data: requester } = await supabase
+        .from("user_profiles")
+        .select("user_name, avatar_url, email")
+        .eq("id", request.user_id)
+        .single();
+
+      await supabase.from("besties").insert({
+        user_id: request.bestie_id,
+        bestie_id: request.user_id,
+        status: "accepted",
+        avatar_url: requester?.avatar_url ?? "/avatar-placeholder.png",
+        user_name:
+          requester?.user_name ??
+          requester?.email?.split("@")[0] ??
+          "Unknown",
+      });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: bestiesKey(user?.id) }),
   });
 
+  /* ---------------- Remove / decline ---------------- */
   const removeReq = useMutation<void, Error, number>({
     mutationFn: async (rowId) => {
-      const { error } = await supabase
+      if (!user) throw new Error("Not signed in");
+
+      const { data: rel } = await supabase
         .from("besties")
-        .delete()
-        .eq("id", rowId);
-      if (error) throw error;
+        .select("*")
+        .eq("id", rowId)
+        .single();
+
+      await supabase.from("besties").delete().eq("id", rowId);
+
+      if (rel?.status === "accepted") {
+        await supabase
+          .from("besties")
+          .delete()
+          .or(
+            `and(user_id.eq.${rel.bestie_id},bestie_id.eq.${rel.user_id}),and(user_id.eq.${rel.user_id},bestie_id.eq.${rel.bestie_id})`
+          );
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: bestiesKey(user?.id) }),
   });
 
+  /* ---------------- Partition rows ---------------- */
   const incoming = rows.filter(
     (r) => r.bestie_id === user?.id && r.status === "pending"
   );
   const outgoing = rows.filter(
     (r) => r.user_id === user?.id && r.status === "pending"
   );
-  const accepted = rows.filter((r) => r.status === "accepted");
 
+  const acceptedMap = new Map<
+    string,
+    { id: number; friendId: string; user_name: string; avatar_url: string }
+  >();
+  rows
+    .filter((r) => r.status === "accepted")
+    .forEach((r) => {
+      const friendId = r.user_id === user?.id ? r.bestie_id : r.user_id;
+      if (!acceptedMap.has(friendId)) {
+        acceptedMap.set(friendId, {
+          id: r.id,
+          friendId,
+          user_name: r.user_name,
+          avatar_url: r.avatar_url,
+        });
+      }
+    });
+  const accepted = Array.from(acceptedMap.values());
+
+  /* ---------------- Render ---------------- */
   if (!user) return <p className="text-center mt-6">Please sign in.</p>;
   if (isLoading) return <p className="text-center mt-6">Loading…</p>;
   if (error)
@@ -267,15 +246,17 @@ export const BestiesList = () => {
 
   return (
     <div className="max-w-lg mx-auto mt-8 bg-white shadow-xl rounded-xl p-6 space-y-8">
-      {/* ============================= Besties ======================== */}
+      {/* Besties */}
       <section>
-        <h2 className="text-xl font-bold text-pink-600 mb-3">Besties</h2>
+        <h2 className="text-xl font-bold text-pink-600 mb-3">
+          Besties ({accepted.length}/{MAX_BESTIES})
+        </h2>
         {accepted.length === 0 && (
           <p className="text-sm text-gray-500">No friends yet.</p>
         )}
         <ul className="space-y-3">
           {accepted.map((b) => (
-            <li key={b.id} className="flex items-center justify-between">
+            <li key={b.friendId} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar url={b.avatar_url} />
                 <span className="font-medium">{b.user_name}</span>
@@ -283,15 +264,16 @@ export const BestiesList = () => {
               <button
                 onClick={() => removeReq.mutate(b.id)}
                 className="text-xs text-red-500 hover:underline"
+                disabled={removeReq.isPending}
               >
-                Remove
+                {removeReq.isPending ? "Removing…" : "Remove"}
               </button>
             </li>
           ))}
         </ul>
       </section>
 
-      {/* ======================== Incoming requests =================== */}
+      {/* Incoming */}
       <section>
         <h3 className="font-semibold mb-2">Incoming requests</h3>
         {incoming.length === 0 && (
@@ -308,14 +290,18 @@ export const BestiesList = () => {
                 <button
                   onClick={() => acceptReq.mutate(b.id)}
                   className="text-xs text-green-600 hover:underline"
+                  disabled={
+                    acceptReq.isPending || accepted.length >= MAX_BESTIES
+                  }
                 >
-                  Accept
+                  {acceptReq.isPending ? "Accepting…" : "Accept"}
                 </button>
                 <button
                   onClick={() => removeReq.mutate(b.id)}
                   className="text-xs text-gray-500 hover:underline"
+                  disabled={removeReq.isPending}
                 >
-                  Decline
+                  {removeReq.isPending ? "Declining…" : "Decline"}
                 </button>
               </div>
             </li>
@@ -323,7 +309,7 @@ export const BestiesList = () => {
         </ul>
       </section>
 
-      {/* ======================== Outgoing requests =================== */}
+      {/* Outgoing */}
       <section>
         <h3 className="font-semibold mb-2">Outgoing requests</h3>
         {outgoing.length === 0 && (
@@ -339,15 +325,16 @@ export const BestiesList = () => {
               <button
                 onClick={() => removeReq.mutate(b.id)}
                 className="text-xs text-gray-500 hover:underline"
+                disabled={removeReq.isPending}
               >
-                Cancel
+                {removeReq.isPending ? "Canceling…" : "Cancel"}
               </button>
             </li>
           ))}
         </ul>
       </section>
 
-      {/* ============================= Add new ======================== */}
+      {/* Add new */}
       <section className="pt-4 border-t border-pink-100">
         <h3 className="font-semibold mb-2">Add a bestie</h3>
         <div className="flex gap-2">
@@ -359,9 +346,16 @@ export const BestiesList = () => {
             className="flex-grow border border-pink-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
           />
           <button
-            disabled={!emailToAdd || addReq.isPending}
+            disabled={
+              !emailToAdd || addReq.isPending || accepted.length >= MAX_BESTIES
+            }
             onClick={() => addReq.mutate(emailToAdd)}
             className="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 disabled:opacity-50"
+            title={
+              accepted.length >= MAX_BESTIES
+                ? `Maximum ${MAX_BESTIES} besties allowed`
+                : ""
+            }
           >
             {addReq.isPending ? "Adding…" : "Add"}
           </button>
@@ -369,6 +363,12 @@ export const BestiesList = () => {
         {addReq.isError && (
           <p className="text-xs text-red-500 mt-1">
             {addReq.error?.message}
+          </p>
+        )}
+        {accepted.length >= MAX_BESTIES && (
+          <p className="text-xs text-amber-600 mt-1">
+            Maximum besties reached ({MAX_BESTIES}/{MAX_BESTIES}). Remove
+            someone to add a new bestie.
           </p>
         )}
       </section>
