@@ -63,14 +63,14 @@ export const BestiesList = () => {
 
           const { data: friendProfile } = await supabase
             .from("user_profiles")
-            .select("email, avatar_url")
+            .select("user_name, avatar_url, email")
             .eq("id", friendId)
             .single();
 
           return {
             ...row,
-            // Use email as username, show the friend's info
-            user_name: friendProfile?.email || "Unknown User",
+            // Show the friend's info - use email if user_name not available
+            user_name: friendProfile?.user_name || friendProfile?.email || "Unknown User",
             avatar_url: friendProfile?.avatar_url || "/avatar-placeholder.png",
           };
         })
@@ -120,16 +120,12 @@ export const BestiesList = () => {
         else throw new Error("Request already exists");
       }
 
-      // Get the current user's email for storage
-      const currentUserEmail = user.email || "unknown@example.com";
-
       const { error } = await supabase.from("besties").insert({
         user_id: user.id,
         bestie_id: found.id,
         status: "pending",
-        // Store placeholder data since we fetch fresh data in the query
-        avatar_url: "/avatar-placeholder.png",
-        user_name: currentUserEmail,
+        avatar_url: found.avatar_url ?? "/avatar-placeholder.png",
+        user_name: found.user_name ?? found.email?.split("@")[0] ?? "Unknown",
       });
       if (error) throw error;
     },
@@ -161,16 +157,21 @@ export const BestiesList = () => {
         .update({ status: "accepted" })
         .eq("id", rowId);
 
-      // Get current user's email for the reciprocal relationship
-      const currentUserEmail = user.email || "unknown@example.com";
+      const { data: requester } = await supabase
+        .from("user_profiles")
+        .select("user_name, avatar_url, email")
+        .eq("id", request.user_id)
+        .single();
 
       await supabase.from("besties").insert({
-        user_id: request.bestie_id, // Current user becomes the "requester" in reciprocal relationship
-        bestie_id: request.user_id, // Original requester becomes the "recipient"
+        user_id: request.bestie_id,
+        bestie_id: request.user_id,
         status: "accepted",
-        // Store placeholder data since we fetch fresh data in the query
-        avatar_url: "/avatar-placeholder.png",
-        user_name: currentUserEmail,
+        avatar_url: requester?.avatar_url ?? "/avatar-placeholder.png",
+        user_name:
+          requester?.user_name ??
+          requester?.email?.split("@")[0] ??
+          "Unknown",
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: bestiesKey(user?.id) }),
