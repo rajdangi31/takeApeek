@@ -27,6 +27,8 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 /*  Helper – safe subscription validator                      */
 /* ────────────────────────────────────────────────────────── */
 function parseValidSubscription(raw: unknown) {
+  console.log('🔍 Parsing subscription:', typeof raw, raw)
+  
   if (!raw) throw new Error('push_subscription is null or missing')
 
   const sub = typeof raw === 'string' ? JSON.parse(raw) : raw
@@ -38,9 +40,11 @@ function parseValidSubscription(raw: unknown) {
     typeof sub.keys.auth !== 'string' ||
     typeof sub.keys.p256dh !== 'string'
   ) {
+    console.error('❌ Invalid subscription structure:', sub)
     throw new Error('Invalid push_subscription structure')
   }
 
+  console.log('✅ Valid subscription parsed')
   return sub
 }
 
@@ -53,12 +57,18 @@ serve(async (req) => {
   }
 
   try {
+    console.log('🚀 Function started')
+    
     const { userId, title, message, url } = await req.json()
+    console.log('📥 Request data:', { userId, title, message, url })
+    
     if (!userId) throw new Error('userId is required')
 
     /* ------------------------------------------------------ */
     /*  1. Find accepted besties                              */
     /* ------------------------------------------------------ */
+    console.log('🔍 Finding besties for user:', userId)
+    
     const { data: relations, error: relationErr } = await supabaseAdmin
       .from('besties')
       .select('user_id, bestie_id')
@@ -66,13 +76,19 @@ serve(async (req) => {
         `and(user_id.eq.${userId},status.eq.accepted),and(bestie_id.eq.${userId},status.eq.accepted)`
       )
 
-    if (relationErr) throw relationErr
+    if (relationErr) {
+      console.error('❌ Relation error:', relationErr)
+      throw relationErr
+    }
 
     const friendIds = relations?.map((r) =>
       r.user_id === userId ? r.bestie_id : r.user_id
     ) ?? []
 
+    console.log('👥 Found friend IDs:', friendIds)
+
     if (!friendIds.length) {
+      console.log('😴 No besties found')
       return new Response(
         JSON.stringify({ message: 'No besties to notify' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -82,14 +98,23 @@ serve(async (req) => {
     /* ------------------------------------------------------ */
     /*  2. Fetch their push subscriptions                     */
     /* ------------------------------------------------------ */
+    console.log('🔔 Fetching push subscriptions...')
+    
     const { data: subs, error: subErr } = await supabaseAdmin
       .from('user_profiles')
       .select('id, push_subscription')
       .in('id', friendIds)
       .not('push_subscription', 'is', null)
 
-    if (subErr) throw subErr
+    if (subErr) {
+      console.error('❌ Subscription error:', subErr)
+      throw subErr
+    }
+    
+    console.log('📱 Found subscriptions:', subs?.length || 0)
+    
     if (!subs?.length) {
+      console.log('😴 No push subscriptions found')
       return new Response(
         JSON.stringify({ message: 'No besties have push enabled' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -107,58 +132,80 @@ serve(async (req) => {
 
     const posterName =
       poster?.user_name || poster?.email?.split('@')[0] || 'Someone'
+    
+    console.log('👤 Poster name:', posterName)
 
     /* ------------------------------------------------------ */
     /*  4. Setup WebPush                                      */
     /* ------------------------------------------------------ */
-    const { default: webpush } = await import('https://esm.sh/web-push@3.6.6')
+    console.log('📦 Importing web-push...')
+    
+    try {
+      const { default: webpush } = await import('https://esm.sh/web-push@3.6.6')
+      console.log('✅ Web-push imported')
 
-    webpush.setVapidDetails(
-      'mailto:dangiprince263@gmail.com',
-      VAPID_PUBLIC_KEY,
-      VAPID_PRIVATE_KEY
-    )
+      webpush.setVapidDetails(
+        'mailto:dangiprince263@gmail.com',
+        VAPID_PUBLIC_KEY,
+        VAPID_PRIVATE_KEY
+      )
+      
+      console.log('🔧 VAPID details set')
 
-    /* ------------------------------------------------------ */
-    /*  5. Send notifications                                 */
-    /* ------------------------------------------------------ */
-    const results = await Promise.allSettled(
-      subs.map(async (user) => {
-        try {
-          const subscription = parseValidSubscription(user.push_subscription)
+      /* ------------------------------------------------------ */
+      /*  5. Send notifications                                 */
+      /* ------------------------------------------------------ */
+      console.log('📤 Sending notifications...')
+      
+      const results = await Promise.allSettled(
+        subs.map(async (user) => {
+          try {
+            console.log(`🔄 Processing user ${user.id}`)
+            
+            const subscription = parseValidSubscription(user.push_subscription)
 
-          const payload = {
-            title: title || `${posterName} shared a new peek! 👀`,
-            body: message || `Check out what ${posterName} is up to`,
-            icon: '/icon-192x192.png',
-            badge: '/badge-72x72.png',
-            url: url || '/',
-            tag: 'new-peek',
+            const payload = {
+              title: title || `${posterName} shared a new peek! 👀`,
+              body: message || `Check out what ${posterName} is up to`,
+              icon: '/icon-192x192.png',
+              badge: '/badge-72x72.png',
+              url: url || '/',
+              tag: 'new-peek',
+            }
+
+            console.log('📤 Sending to:', user.id)
+            await webpush.sendNotification(subscription, JSON.stringify(payload))
+            console.log('✅ Sent to:', user.id)
+
+            return { success: true, userId: user.id }
+          } catch (err) {
+            console.error(`❌ Failed for user ${user.id}:`, err)
+            return {
+              success: false,
+              userId: user.id,
+              error: err?.message || String(err),
+            }
           }
+        })
+      )
 
-          await webpush.sendNotification(subscription, JSON.stringify(payload))
+      const formatted = results.map((r) =>
+        r.status === 'fulfilled' ? r.value : { success: false, error: 'Promise failed' }
+      )
 
-          return { success: true, userId: user.id }
-        } catch (err) {
-          return {
-            success: false,
-            userId: user.id,
-            error: err?.message || String(err),
-          }
-        }
-      })
-    )
+      const count = formatted.filter((r) => r.success).length
+      console.log(`🎉 Successfully sent ${count} notifications`)
 
-    const formatted = results.map((r) =>
-      r.status === 'fulfilled' ? r.value : { success: false, error: 'Promise failed' }
-    )
-
-    const count = formatted.filter((r) => r.success).length
-
-    return new Response(
-      JSON.stringify({ message: `Sent ${count} notifications`, results: formatted }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+      return new Response(
+        JSON.stringify({ message: `Sent ${count} notifications`, results: formatted }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+      
+    } catch (webpushError) {
+      console.error('💥 Web-push import/setup error:', webpushError)
+      throw new Error(`Web-push error: ${webpushError.message}`)
+    }
+    
   } catch (err) {
     console.error('❌ send-notifications error:', err)
     return new Response(
