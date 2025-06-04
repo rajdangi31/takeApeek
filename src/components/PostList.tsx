@@ -16,7 +16,6 @@ export interface Peeks {
 }
 
 const fetchBestiesPosts = async (userId: string): Promise<Peeks[]> => {
-  // First, get all accepted besties
   const { data: besties, error: bestiesError } = await supabase
     .from("besties")
     .select("user_id, bestie_id")
@@ -25,24 +24,14 @@ const fetchBestiesPosts = async (userId: string): Promise<Peeks[]> => {
 
   if (bestiesError) throw new Error(bestiesError.message);
 
-  // Extract bestie user IDs (excluding current user)
   const bestieIds = new Set<string>();
-  besties?.forEach(bestie => {
-    if (bestie.user_id === userId) {
-      bestieIds.add(bestie.bestie_id);
-    } else {
-      bestieIds.add(bestie.user_id);
-    }
+  besties?.forEach((bestie) => {
+    if (bestie.user_id === userId) bestieIds.add(bestie.bestie_id);
+    else bestieIds.add(bestie.user_id);
   });
 
-  // Always include current user's posts
   bestieIds.add(userId);
 
-  if (bestieIds.size === 0) {
-    return []; // No besties, return empty array
-  }
-
-  // Get user emails for these user IDs
   const { data: userProfiles, error: profileError } = await supabase
     .from("user_profiles")
     .select("id, email")
@@ -50,20 +39,14 @@ const fetchBestiesPosts = async (userId: string): Promise<Peeks[]> => {
 
   if (profileError) throw new Error(profileError.message);
 
-  const bestieEmails = userProfiles?.map(profile => profile.email) || [];
+  const bestieEmails = userProfiles?.map((profile) => profile.email) || [];
 
-  if (bestieEmails.length === 0) {
-    return [];
-  }
-
-  // Now get posts from these users
   const { data, error } = await supabase.rpc("get_posts_with_counts");
 
   if (error) throw new Error(error.message);
 
-  // Filter posts to only include those from besties
   const allPosts = data as Peeks[];
-  return allPosts.filter(post => bestieEmails.includes(post.user_email));
+  return allPosts.filter((post) => bestieEmails.includes(post.user_email));
 };
 
 export const PostList = () => {
@@ -75,58 +58,74 @@ export const PostList = () => {
       if (!user) return [];
       return fetchBestiesPosts(user.id);
     },
-    enabled: !!user, // Only run query if user is logged in
+    enabled: !!user,
   });
+
+  const MessageCard = ({
+    emoji,
+    title,
+    description,
+    color = "pink",
+  }: {
+    emoji: string;
+    title: string;
+    description: string;
+    color?: "pink" | "red";
+  }) => (
+    <div
+      className={`bg-gradient-to-br from-${color}-900/30 to-${color}-700/20 text-white/90 backdrop-blur-xl border border-${color}-500/30 rounded-3xl max-w-md mx-auto p-8 shadow-xl`}
+    >
+      <div className="text-6xl mb-4 text-center">{emoji}</div>
+      <h3 className="text-xl font-bold text-center mb-2">{title}</h3>
+      <p className="text-sm text-center text-white/70">{description}</p>
+    </div>
+  );
 
   if (!user) {
     return (
-      <div className="text-center py-12">
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg max-w-md mx-auto p-8 border border-pink-100">
-          <div className="text-6xl mb-4">🔐</div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Sign in to peek!</h3>
-          <p className="text-gray-600 text-sm">
-            Please sign in to see peeks from your besties.
-          </p>
-        </div>
+      <div className="py-12 text-center">
+        <MessageCard
+          emoji="🔐"
+          title="Sign in to peek!"
+          description="Please sign in to see peeks from your besties."
+        />
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="text-center py-12">
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg max-w-md mx-auto p-8 border border-pink-100">
-          <div className="animate-pulse">
-            <div className="text-6xl mb-4">👀</div>
-            <h3 className="text-xl font-bold text-gray-800">Loading Peeks...</h3>
-          </div>
-        </div>
+      <div className="py-12 text-center">
+        <MessageCard
+          emoji="👀"
+          title="Loading Peeks..."
+          description="Fetching the latest peeks from your inner circle..."
+        />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg max-w-md mx-auto p-8 border border-red-100">
-          <div className="text-6xl mb-4">😞</div>
-          <h3 className="text-xl font-bold text-red-600 mb-2">Oops!</h3>
-          <p className="text-red-500 text-sm">Error: {error.message}</p>
-        </div>
+      <div className="py-12 text-center">
+        <MessageCard
+          emoji="😞"
+          title="Oops!"
+          description={`Error: ${error.message}`}
+          color="red"
+        />
       </div>
     );
   }
 
   if (!data || data.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg max-w-md mx-auto p-8 border border-pink-100">
-          <div className="text-6xl mb-4">📱</div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">No peeks yet!</h3>
-          <p className="text-gray-600 text-sm">
-            No peeks from your besties yet. Add some friends to see their posts!
-          </p>
-        </div>
+      <div className="py-12 text-center">
+        <MessageCard
+          emoji="📱"
+          title="No peeks yet!"
+          description="No peeks from your besties yet. Add some friends to see their posts!"
+        />
       </div>
     );
   }

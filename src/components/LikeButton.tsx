@@ -76,24 +76,26 @@ export const LikeButton = ({ postId }: Props) => {
     },
   });
 
-  if (isLoading) return <div>Loading loves...</div>;
-  if (error) return <div>Error: {error.message}</div>;
+  if (isLoading)
+    return <div className="text-pink-400 text-sm">Loading loves...</div>;
+  if (error)
+    return <div className="text-red-400 text-sm">Error: {error.message}</div>;
 
   const likes = Loves?.filter((v) => v.loves === 1).length || 0;
-  const hasLoved = Loves?.some((v) => v.user_id === user?.id && v.loves === 1);
+  const hasLoved = Loves?.some(
+    (v) => v.user_id === user?.id && v.loves === 1
+  );
 
   return (
-    <div className="text-center mt-2">
+    <div className="text-center mt-4">
       <button
         onClick={() => mutate(1)}
-        className={`text-2xl transition-transform duration-200 ${
-          hasLoved
-            ? "text-pink-600 scale-110"
-            : "text-gray-400 hover:text-pink-500"
+        className={`text-2xl transition-all duration-300 transform hover:scale-110 focus:outline-none ${
+          hasLoved ? "text-pink-500 scale-110" : "text-gray-500 hover:text-pink-400"
         }`}
         title={hasLoved ? "Unlike" : "Love this"}
       >
-        {hasLoved ? "🖤" : "🤍"} <span className="ml-1 text-base">{likes}</span>
+        {hasLoved ? "🖤" : "🤍"} <span className="ml-1 text-base text-pink-200">{likes}</span>
       </button>
     </div>
   );

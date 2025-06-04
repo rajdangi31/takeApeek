@@ -1,4 +1,3 @@
-// src/components/NotificationSettings.tsx
 import { Bell, BellOff, CheckCircle, TestTube } from "lucide-react";
 import { usePushNotifications } from "../usePushNotifications";
 import { useAuth } from "../contexts/AuthContext";
@@ -13,12 +12,8 @@ export const NotificationSettings = () => {
     unsubscribeUser,
   } = usePushNotifications(user?.id);
 
-  /* -------------------------------------------------- */
-  /*  Local helpers                                      */
-  /* -------------------------------------------------- */
   const sendTestNotification = () => {
     if ("Notification" in window && Notification.permission === "granted") {
-      /*  —— cast to silence lib.dom type gap (TS < 5.2 lacks `vibrate`) —— */
       const opts = {
         body: "Test notification! Your push notifications are working perfectly.",
         icon: "/icon-192.png",
@@ -32,49 +27,40 @@ export const NotificationSettings = () => {
     }
   };
 
-  /* -------------------------------------------------- */
-  /*  Unsupported browser                               */
-  /* -------------------------------------------------- */
   if (!isSupported) {
     return (
-      <div className="p-6 bg-red-50 rounded-lg border border-red-200">
+      <div className="p-6 bg-[#1a1a2e] rounded-xl border border-red-500 text-red-400">
         <div className="flex items-center mb-2">
           <BellOff size={20} className="text-red-500 mr-2" />
-          <h3 className="font-semibold text-red-800">Not Supported</h3>
+          <h3 className="font-semibold">Not Supported</h3>
         </div>
-        <p className="text-red-600 text-sm">
+        <p className="text-sm">
           Push notifications aren’t available in this browser. Try Chrome,
-          Firefox or install the PWA.
+          Firefox, or install the PWA.
         </p>
       </div>
     );
   }
 
-  /* -------------------------------------------------- */
-  /*  UI                                                */
-  /* -------------------------------------------------- */
   return (
-    <div className="space-y-4">
-      {/* Main toggle card */}
-      <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center">
-            <Bell size={20} className="text-blue-600 mr-2" />
+    <div className="space-y-6 max-w-md mx-auto">
+      {/* Notification Toggle */}
+      <div className="p-5 bg-[#12121c] rounded-2xl border border-pink-600 shadow-[0_0_25px_#ec489980]">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <Bell size={22} className="text-pink-500" />
             <div>
-              <h3 className="font-semibold text-gray-800">
-                Push Notifications
-              </h3>
-              <p className="text-sm text-gray-600">
-                Get notified about new peeks and activity
+              <h3 className="text-white font-bold">Push Notifications</h3>
+              <p className="text-sm text-gray-400">
+                Get notified about new peeks and activity.
               </p>
             </div>
           </div>
-
           <span
             className={`px-3 py-1 rounded-full text-xs font-medium ${
               isSubscribed
-                ? "bg-green-100 text-green-800"
-                : "bg-gray-100 text-gray-600"
+                ? "bg-green-600 text-white"
+                : "bg-gray-700 text-gray-300"
             }`}
           >
             {isSubscribed ? "Enabled" : "Disabled"}
@@ -84,11 +70,11 @@ export const NotificationSettings = () => {
         <button
           onClick={isSubscribed ? unsubscribeUser : subscribeUser}
           disabled={loading}
-          className={`w-full px-4 py-3 rounded-lg font-medium transition ${
+          className={`w-full px-4 py-3 rounded-xl font-semibold text-white transition flex items-center justify-center ${
             isSubscribed
-              ? "bg-red-500 hover:bg-red-600"
-              : "bg-blue-500 hover:bg-blue-600"
-          } text-white disabled:opacity-50 flex items-center justify-center`}
+              ? "bg-red-600 hover:bg-red-700"
+              : "bg-pink-500 hover:bg-pink-600"
+          } disabled:opacity-50`}
         >
           {loading ? (
             <>
@@ -120,17 +106,17 @@ export const NotificationSettings = () => {
         </button>
       </div>
 
-      {/* Test notification card */}
+      {/* Test Notification */}
       {isSubscribed && (
-        <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+        <div className="p-5 bg-[#102a19] border border-green-600 rounded-2xl shadow-[0_0_20px_#22c55e60]">
           <div className="flex items-center mb-2">
-            <CheckCircle size={20} className="text-green-600 mr-2" />
-            <h4 className="font-medium text-green-800">Notifications active</h4>
+            <CheckCircle size={20} className="text-green-500 mr-2" />
+            <h4 className="font-medium text-green-400">Notifications Active</h4>
           </div>
 
           <button
             onClick={sendTestNotification}
-            className="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center"
+            className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-semibold flex items-center justify-center transition"
           >
             <TestTube size={16} className="mr-2" />
             Send Test Notification
@@ -138,25 +124,25 @@ export const NotificationSettings = () => {
         </div>
       )}
 
-      {/* Static list (placeholder) */}
-      <div className="p-4 bg-gray-50 rounded-lg">
-        <h4 className="font-medium text-gray-800 mb-3">Notification Types</h4>
-        <ul className="space-y-2 text-sm">
+      {/* Static Notification Types */}
+      <div className="p-5 bg-[#1c1c29] rounded-2xl border border-gray-700">
+        <h4 className="font-semibold text-white mb-3">Notification Types</h4>
+        <ul className="space-y-2 text-sm text-gray-400">
           <li className="flex justify-between">
-            <span className="text-gray-600">New Peeks from Besties</span>
-            <span className="text-green-600 font-medium">✓ Enabled</span>
+            <span>New Peeks from Besties</span>
+            <span className="text-green-400 font-medium">✓ Enabled</span>
           </li>
           <li className="flex justify-between">
-            <span className="text-gray-600">Comments on Your Peeks</span>
-            <span className="text-green-600 font-medium">✓ Enabled</span>
+            <span>Comments on Your Peeks</span>
+            <span className="text-green-400 font-medium">✓ Enabled</span>
           </li>
           <li className="flex justify-between">
-            <span className="text-gray-600">New Bestie Requests</span>
-            <span className="text-green-600 font-medium">✓ Enabled</span>
+            <span>New Bestie Requests</span>
+            <span className="text-green-400 font-medium">✓ Enabled</span>
           </li>
           <li className="flex justify-between">
-            <span className="text-gray-600">Daily Reminders</span>
-            <span className="text-yellow-600 font-medium">Coming Soon</span>
+            <span>Daily Reminders</span>
+            <span className="text-yellow-400 font-medium">Coming Soon</span>
           </li>
         </ul>
       </div>

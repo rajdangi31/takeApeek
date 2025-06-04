@@ -3,17 +3,17 @@ import { NotificationSettings } from "../components/NotificationSettings";
 
 export const Home = () => {
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 bg-black min-h-screen text-white pb-10">
       {/* Header Section */}
-      <div className="text-center py-8">
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg max-w-md mx-auto p-8 border border-pink-100">
-          <div className="flex items-center justify-center mb-4">
-            <div className="text-6xl">👀</div>
+      <div className="text-center py-12">
+        <div className="bg-gradient-to-br from-fuchsia-600 to-pink-600 rounded-3xl shadow-[0_20px_60px_rgba(236,72,153,0.6)] max-w-md mx-auto p-10 border border-fuchsia-500 animate-fade-in">
+          <div className="flex items-center justify-center mb-5">
+            <div className="text-6xl animate-pulse">👀</div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+          <h1 className="text-3xl font-bold text-white mb-3 tracking-wide drop-shadow-md">
             Peek your besties!
           </h1>
-          <p className="text-gray-600 text-sm">
+          <p className="text-fuchsia-100 text-sm">
             See what your friends are up to right now
           </p>
         </div>
@@ -25,7 +25,7 @@ export const Home = () => {
       </div>
 
       {/* Posts Feed */}
-      <div className="space-y-6">
+      <div className="space-y-6 px-4">
         <PostList />
       </div>
     </div>

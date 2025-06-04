@@ -10,52 +10,49 @@ export const Navbar = () => {
     user?.user_metadata.user_name || user?.email?.split("@")[0];
 
   return (
-    <nav className="bg-[#fff0b8] shadow-md border-b border-yellow-200">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <nav className="bg-[#0f0f1a] shadow-lg border-b border-pink-600 z-50 sticky top-0">
+      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
         {/* Logo */}
-        <Link to="/">
+        <Link to="/" className="flex items-center space-x-2">
           <img
             src="/Logo.png"
             alt="takeApeek Logo"
-            className="h-16 w-auto"
+            className="h-10 w-auto drop-shadow-md"
           />
+          <span className="text-pink-500 font-bold text-xl tracking-wide">takeApeek</span>
         </Link>
 
-        {/* Desktop Nav Links */}
+        {/* Desktop Navigation */}
         <div className="hidden md:flex items-center space-x-6">
-          <Link to="/" className="text-pink-600 font-semibold hover:text-black">
+          <Link to="/" className="text-white hover:text-pink-500 transition font-medium">
             Home
           </Link>
-          
-          <Link
-            to="/besties"
-            className="text-pink-600 font-semibold hover:text-black"
-          >
+          <Link to="/besties" className="text-white hover:text-pink-500 transition font-medium">
             Besties
           </Link>
           <Link
             to="/shareApeek"
-            className="bg-pink-500 text-white px-4 py-1 rounded-full hover:bg-pink-600 text-sm font-medium"
+            className="bg-pink-500 text-white px-4 py-1.5 rounded-full hover:bg-pink-600 transition text-sm font-semibold"
           >
             Share a Peek!
           </Link>
 
-          {/* Desktop Auth */}
+          {/* Auth */}
           {user ? (
-            <div className="flex items-center space-x-3 pl-6 border-l border-pink-200">
+            <div className="flex items-center space-x-3 border-l border-pink-700 pl-4 ml-4">
               {user.user_metadata.avatar_url && (
                 <img
                   src={user.user_metadata.avatar_url}
                   alt="User Avatar"
-                  className="h-8 w-8 rounded-full object-cover"
+                  className="h-8 w-8 rounded-full object-cover border border-pink-400"
                 />
               )}
-              <span className="text-gray-800 text-sm font-medium">
+              <span className="text-sm text-white font-medium">
                 {displayName}
               </span>
               <button
                 onClick={signOut}
-                className="text-sm text-pink-600 hover:text-pink-800"
+                className="text-sm text-pink-400 hover:text-pink-300 transition"
               >
                 Sign Out
               </button>
@@ -63,18 +60,18 @@ export const Navbar = () => {
           ) : (
             <button
               onClick={signInWithGoogle}
-              className="bg-pink-500 text-white px-4 py-1 rounded-full hover:bg-pink-600 text-sm font-medium"
+              className="bg-pink-500 text-white px-4 py-1.5 rounded-full hover:bg-pink-600 transition text-sm font-semibold"
             >
               Sign In
             </button>
           )}
         </div>
 
-        {/* Mobile Menu Toggle */}
+        {/* Mobile Toggle */}
         <div className="md:hidden">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="text-pink-600"
+            className="text-pink-500 hover:text-pink-400 transition"
           >
             <svg
               className="w-6 h-6"
@@ -104,53 +101,47 @@ export const Navbar = () => {
 
       {/* Mobile Menu */}
       {menuOpen && (
-        <div className="md:hidden bg-[#fff0b8] px-4 pb-4">
-          {/* Mobile Auth */}
-          {user ? (
-            <div className="flex items-center space-x-3 py-2 border-b border-pink-200">
+        <div className="md:hidden bg-[#1a1a2e] px-4 pb-4 space-y-4">
+          {user && (
+            <div className="flex items-center space-x-3 py-3 border-b border-pink-600">
               {user.user_metadata.avatar_url && (
                 <img
                   src={user.user_metadata.avatar_url}
                   alt="User Avatar"
-                  className="h-8 w-8 rounded-full object-cover"
+                  className="h-8 w-8 rounded-full object-cover border border-pink-400"
                 />
               )}
-              <span className="text-gray-800 text-sm font-medium">
+              <span className="text-sm text-white font-medium">
                 {displayName}
               </span>
             </div>
-          ) : null}
+          )}
 
-          <div className="flex flex-col space-y-2 pt-4">
-            <Link to="/" className="text-pink-600 font-semibold hover:text-black">
-              Home
-            </Link>
-            <Link
-              to="/besties"
-              className="text-pink-600 font-semibold hover:text-black"
-            >
-              Besties
-            </Link>
-            <Link
-              to="/shareApeek"
-              className="bg-pink-500 text-white px-4 py-1 rounded-full text-center hover:bg-pink-600 text-sm font-medium"
-            >
-              Share a Peek!
-            </Link>
-          </div>
+          <Link to="/" className="text-white hover:text-pink-500 font-medium">
+            Home
+          </Link>
+          <Link to="/besties" className="text-white hover:text-pink-500 font-medium">
+            Besties
+          </Link>
+          <Link
+            to="/shareApeek"
+            className="block text-center bg-pink-500 text-white px-4 py-2 rounded-full hover:bg-pink-600 font-semibold"
+          >
+            Share a Peek!
+          </Link>
 
-          <div className="pt-4 border-t border-pink-200">
+          <div className="pt-4 border-t border-pink-600">
             {user ? (
               <button
                 onClick={signOut}
-                className="w-full bg-pink-500 text-white px-4 py-2 rounded-full hover:bg-pink-600 text-sm font-medium"
+                className="w-full bg-pink-500 text-white px-4 py-2 rounded-full hover:bg-pink-600 font-semibold"
               >
                 Sign Out
               </button>
             ) : (
               <button
                 onClick={signInWithGoogle}
-                className="w-full bg-pink-500 text-white px-4 py-2 rounded-full hover:bg-pink-600 text-sm font-medium"
+                className="w-full bg-pink-500 text-white px-4 py-2 rounded-full hover:bg-pink-600 font-semibold"
               >
                 Sign In
               </button>

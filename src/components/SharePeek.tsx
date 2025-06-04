@@ -10,294 +10,211 @@ interface PostInput {
   avatar_url: string | null;
 }
 
-// Helper function to compress/resize image
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
     const img = new Image();
-    
+
     img.onload = () => {
-      // Set max dimensions
-      const maxWidth = 1200;
-      const maxHeight = 1200;
-      
+      const maxDim = 1200;
       let { width, height } = img;
-      
-      // Calculate new dimensions
-      if (width > height) {
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
-        }
-      } else {
-        if (height > maxHeight) {
-          width = (width * maxHeight) / height;
-          height = maxHeight;
-        }
+
+      if (width > height && width > maxDim) {
+        height = (height * maxDim) / width;
+        width = maxDim;
+      } else if (height > maxDim) {
+        width = (width * maxDim) / height;
+        height = maxDim;
       }
-      
+
       canvas.width = width;
       canvas.height = height;
-      
-      // Draw and compress
       ctx.drawImage(img, 0, 0, width, height);
-      
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now(),
-            });
-            resolve(compressedFile);
-          } else {
-            resolve(file);
-          }
-        },
-        'image/jpeg',
-        0.8 // 80% quality
-      );
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(new File([blob], file.name, { type: "image/jpeg" }));
+        } else resolve(file);
+      }, "image/jpeg", 0.8);
     };
-    
+
     img.src = URL.createObjectURL(file);
   });
 };
 
 const sharePeek = async (post: PostInput, imageFile: File) => {
-  try {
-    // First compress the image
-    const compressedFile = await compressImage(imageFile);
-    
-    const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}-${compressedFile.name}`;
-    
-    console.log('Uploading file:', filePath, 'Size:', compressedFile.size);
-    
-    const { error: uploadError } = await supabase.storage
-      .from("peeks")
-      .upload(filePath, compressedFile, {
-        cacheControl: '3600',
-        upsert: false
-      });
+  const compressed = await compressImage(imageFile);
+  const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, "_")}-${Date.now()}-${compressed.name}`;
 
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      throw new Error(`Upload failed: ${uploadError.message}`);
-    }
+  const { error: uploadError } = await supabase.storage
+    .from("peeks")
+    .upload(filePath, compressed);
 
-    const { data: publicURLData } = supabase.storage
-      .from("peeks")
-      .getPublicUrl(filePath);
+  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
-    console.log('Public URL:', publicURLData.publicUrl);
+  const { data: publicURLData } = supabase.storage
+    .from("peeks")
+    .getPublicUrl(filePath);
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
-      console.error('User error:', userError);
-      throw new Error("User not authenticated");
-    }
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) throw new Error("User not authenticated");
 
-    const userEmail = userData.user.email;
+  const { error } = await supabase.from("Peeks").insert({
+    ...post,
+    image_url: publicURLData.publicUrl,
+    user_email: userData.user.email,
+  });
 
-    const { data, error } = await supabase
-      .from("Peeks")
-      .insert({
-        ...post,
-        image_url: publicURLData.publicUrl,
-        user_email: userEmail,
-      });
-
-    if (error) {
-      console.error('Database error:', error);
-      throw new Error(`Database error: ${error.message}`);
-    }
-    
-    console.log('Success:', data);
-    return data;
-  } catch (error) {
-    console.error('Full error:', error);
-    throw error;
-  }
+  if (error) throw new Error(`Database error: ${error.message}`);
 };
 
 export const SharePeek = () => {
-  const [title, setTitle] = useState<string>("");
-  const [content, setContent] = useState<string>("");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [errorMessage, setErrorMessage] = useState("");
   const { user } = useAuth();
 
   const { mutate, isPending, isError, isSuccess } = useMutation({
-    mutationFn: (data: { post: PostInput; imageFile: File }) => {
-      return sharePeek(data.post, data.imageFile);
-    },
+    mutationFn: (data: { post: PostInput; imageFile: File }) =>
+      sharePeek(data.post, data.imageFile),
     onSuccess: () => {
-      // Reset form on success
       setTitle("");
       setContent("");
       setSelectedFile(null);
       setErrorMessage("");
-      // Reset file input
-      const fileInput = document.getElementById("image") as HTMLInputElement;
-      if (fileInput) fileInput.value = "";
+      const input = document.getElementById("image") as HTMLInputElement;
+      if (input) input.value = "";
     },
     onError: (error) => {
-      console.error('Mutation error:', error);
-      setErrorMessage(error instanceof Error ? error.message : 'Unknown error occurred');
-    }
+      setErrorMessage(error instanceof Error ? error.message : "Unknown error");
+    },
   });
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024)
+      return setErrorMessage("File too large. Keep it under 10MB.");
+
+    if (!file.type.startsWith("image/"))
+      return setErrorMessage("Only image files are allowed.");
+
+    setSelectedFile(file);
+    setErrorMessage("");
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedFile) return;
-    
-    setErrorMessage(""); // Clear previous errors
-    
+
+    setErrorMessage("");
     mutate({
-      post: { 
-        title, 
-        content, 
+      post: {
+        title,
+        content,
         avatar_url: user?.user_metadata.avatar_url || null,
-      }, 
-      imageFile: selectedFile 
+      },
+      imageFile: selectedFile,
     });
   };
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      
-      // Check file size (10MB limit)
-      if (file.size > 10 * 1024 * 1024) {
-        setErrorMessage("File too large. Please choose a smaller image (under 10MB).");
-        return;
-      }
-      
-      // Check file type
-      if (!file.type.startsWith('image/')) {
-        setErrorMessage("Please select an image file.");
-        return;
-      }
-      
-      setSelectedFile(file);
-      setErrorMessage(""); // Clear any previous error
-    }
-  };
-
   return (
-    <div className="max-w-md mx-auto">
+    <div className="max-w-md mx-auto space-y-8">
       {/* Header */}
-      <div className="text-center mb-8">
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg p-6 border border-pink-100">
-          <div className="text-5xl mb-3">📸</div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Share a Peek!</h1>
-          <p className="text-gray-600 text-sm">Let your besties know what you're up to</p>
-        </div>
+      <div className="bg-gradient-to-br from-pink-900/40 to-pink-700/20 border border-pink-400/40 shadow-xl rounded-3xl p-6 text-center text-white">
+        <div className="text-5xl mb-3">📸</div>
+        <h1 className="text-2xl font-bold mb-1">Share a Peek!</h1>
+        <p className="text-sm text-pink-100">Let your besties know what you're up to</p>
       </div>
 
       {/* Form */}
-      <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-lg p-6 border border-pink-100">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Title Input */}
-          <div>
-            <label className="block text-pink-600 font-semibold mb-2 text-sm">
-              📝 What's happening?
-            </label>
-            <input
-              type="text"
-              id="title"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Give your peek a title..."
-              className="w-full border-2 border-pink-200 rounded-2xl px-4 py-3 focus:outline-none focus:border-pink-400 focus:ring-4 focus:ring-pink-100 transition-all duration-200 bg-white/80 placeholder-gray-400"
-            />
-          </div>
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-3xl p-6 shadow-2xl space-y-6"
+      >
+        <div>
+          <label className="block text-pink-300 font-medium mb-2 text-sm">
+            📝 What's happening?
+          </label>
+          <input
+            type="text"
+            value={title}
+            required
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Give your peek a title..."
+            className="w-full px-4 py-3 rounded-xl bg-black/30 text-white border border-pink-400/40 placeholder-pink-300 focus:ring-2 focus:ring-pink-500 focus:outline-none"
+          />
+        </div>
 
-          {/* Content Input */}
-          <div>
-            <label className="block text-pink-600 font-semibold mb-2 text-sm">
-              💭 Tell us more (optional)
-            </label>
-            <textarea
-              id="content"
-              rows={4}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Share what's on your mind..."
-              className="w-full border-2 border-pink-200 rounded-2xl px-4 py-3 focus:outline-none focus:border-pink-400 focus:ring-4 focus:ring-pink-100 transition-all duration-200 bg-white/80 placeholder-gray-400 resize-none"
-            />
-          </div>
+        <div>
+          <label className="block text-pink-300 font-medium mb-2 text-sm">
+            💭 Add more context (optional)
+          </label>
+          <textarea
+            rows={3}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Share what's on your mind..."
+            className="w-full px-4 py-3 rounded-xl bg-black/30 text-white border border-pink-400/40 placeholder-pink-300 resize-none focus:ring-2 focus:ring-pink-500 focus:outline-none"
+          />
+        </div>
 
-          {/* File Input */}
-          <div>
-            <label className="block text-pink-600 font-semibold mb-2 text-sm">
-              📷 Take a Peek
-            </label>
-            <div className="relative">
-              <input
-                type="file"
-                id="image"
-                accept="image/*"
-                capture="environment"
-                required
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <label
-                htmlFor="image"
-                className="w-full bg-gradient-to-r from-pink-500 to-pink-600 text-white font-semibold px-6 py-4 rounded-2xl cursor-pointer hover:from-pink-600 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border-2 border-pink-400"
-              >
-                <span className="text-xl">📸</span>
-                {selectedFile ? selectedFile.name : "Choose Photo"}
-              </label>
-            </div>
-            {selectedFile && (
-              <div className="mt-2">
-                <p className="text-green-600 text-xs font-medium">
-                  ✅ Photo selected: {selectedFile.name}
-                </p>
-                <p className="text-gray-500 text-xs">
-                  Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={isPending || !selectedFile}
-            className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-bold py-4 rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed text-lg"
+        <div>
+          <label className="block text-pink-300 font-medium mb-2 text-sm">
+            📷 Upload an image
+          </label>
+          <input
+            id="image"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            required
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <label
+            htmlFor="image"
+            className="w-full cursor-pointer bg-gradient-to-r from-pink-600 to-pink-700 hover:from-pink-700 hover:to-pink-800 text-white font-semibold text-center py-3 px-6 rounded-xl block shadow-lg transition"
           >
-            {isPending ? (
-              <span className="flex items-center justify-center gap-2">
-                <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
-                Sharing your peek...
-              </span>
-            ) : (
-              <span className="flex items-center justify-center gap-2">
-                <span className="text-xl">✨</span>
-                Share Peek!
-              </span>
-            )}
-          </button>
+            {selectedFile ? `📸 ${selectedFile.name}` : "📸 Choose Photo"}
+          </label>
+          {selectedFile && (
+            <p className="text-green-400 text-sm mt-1">
+              ✅ {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+            </p>
+          )}
+        </div>
 
-          {/* Status Messages */}
-          {isError && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
-              <p className="text-red-600 font-medium text-sm">😞 Error creating post:</p>
-              <p className="text-red-500 text-xs mt-1 break-words">{errorMessage}</p>
-            </div>
+        <button
+          type="submit"
+          disabled={isPending || !selectedFile}
+          className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 disabled:from-gray-500 disabled:to-gray-700 text-white font-bold py-3 rounded-xl transition shadow-lg disabled:cursor-not-allowed"
+        >
+          {isPending ? (
+            <span className="flex items-center justify-center gap-2">
+              <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+              Sharing your peek...
+            </span>
+          ) : (
+            <span>✨ Share Peek!</span>
           )}
-          
-          {isSuccess && (
-            <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
-              <p className="text-green-600 font-medium">🎉 Peek shared successfully!</p>
-            </div>
-          )}
-        </form>
-      </div>
+        </button>
+
+        {/* Status messages */}
+        {isError && (
+          <div className="text-red-400 bg-red-900/30 border border-red-400/40 rounded-xl px-4 py-2 text-sm">
+            <p>😞 {errorMessage}</p>
+          </div>
+        )}
+        {isSuccess && (
+          <div className="text-green-400 bg-green-900/30 border border-green-400/40 rounded-xl px-4 py-2 text-sm">
+            🎉 Peek shared successfully!
+          </div>
+        )}
+      </form>
     </div>
   );
 };

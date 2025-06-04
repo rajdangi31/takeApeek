@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../supabase-client";
-import { comment } from "postcss";
 import { CommentItem } from "./CommentItem";
 
 interface Props {
@@ -15,13 +14,13 @@ interface NewComment {
 }
 
 export interface Comment {
-    id: number;
-    post_id: number;
-    parent_comment_id: number | null;
-    content: string;
-    user_id: string;
-    created_at: string;
-    author: string;
+  id: number;
+  post_id: number;
+  parent_comment_id: number | null;
+  content: string;
+  user_id: string;
+  created_at: string;
+  author: string;
 }
 
 const createComment = async (
@@ -45,21 +44,21 @@ const createComment = async (
   if (error) throw new Error(error.message);
 };
 
-const fetchComments = async (postId: number) : Promise<Comment[]> => {
-    const { data, error } = await supabase
-        .from("comments")
-        .select("*")
-        .eq("post_id", postId)
-        .order("created_at", {ascending:true});
+const fetchComments = async (postId: number): Promise<Comment[]> => {
+  const { data, error } = await supabase
+    .from("comments")
+    .select("*")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true });
 
-      if (error) throw new Error(error.message);
-      return data as Comment[];
-}
+  if (error) throw new Error(error.message);
+  return data as Comment[];
+};
 
 export const CommentSection = ({ postId }: Props) => {
   const [newCommentText, setNewCommentText] = useState<string>("");
   const { user } = useAuth();
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   const {
     data: comments,
@@ -79,9 +78,9 @@ export const CommentSection = ({ postId }: Props) => {
         user?.id,
         user?.user_metadata?.user_name || user?.email
       ),
-    onSuccess: ()=> {
-      queryClient.invalidateQueries({queryKey:["comments", postId]});
-    } 
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comments", postId] });
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -91,50 +90,44 @@ export const CommentSection = ({ postId }: Props) => {
     setNewCommentText("");
   };
 
-  /* Map of Comments - Organize Replies - Return Tree */
-
   const buildCommentTree = (
     flatComments: Comment[]
-  ): (Comment & {children?: Comment[] })[] => {
-    const map = new Map<number, Comment & { children?: Comment[]}>();
-    
-    const roots: (Comment & {children?: Comment[]})[] = [];
+  ): (Comment & { children?: Comment[] })[] => {
+    const map = new Map<number, Comment & { children?: Comment[] }>();
+    const roots: (Comment & { children?: Comment[] })[] = [];
 
     flatComments.forEach((comment) => {
-      map.set(comment.id, {...comment, children: [] });
+      map.set(comment.id, { ...comment, children: [] });
     });
 
     flatComments.forEach((comment) => {
-      if(comment.parent_comment_id) {
-        const parent = map.get(comment.parent_comment_id)
+      if (comment.parent_comment_id) {
+        const parent = map.get(comment.parent_comment_id);
         if (parent) {
-          parent.children!.push(map.get(comment.id)!)
+          parent.children!.push(map.get(comment.id)!);
         }
-      }
-      else {
-        roots.push(map.get(comment.id)!)
+      } else {
+        roots.push(map.get(comment.id)!);
       }
     });
 
     return roots;
   };
-   
-    if (isLoading) {
-      return <div>Loading Comments...</div>;
-    }
 
-    if (error) {
-     return <div>Error: {error.message}</div>;
-    }
+  if (isLoading) {
+    return <div className="text-center text-pink-400">Loading Comments...</div>;
+  }
 
-    const commentTree = comments ? buildCommentTree(comments) : []; 
-    
+  if (error) {
+    return <div className="text-center text-red-500">Error: {error.message}</div>;
+  }
+
+  const commentTree = comments ? buildCommentTree(comments) : [];
 
   return (
-    <div className="max-w-md mx-auto mt-8 bg-white rounded-xl p-6 shadow-md">
-      <h3 className="text-lg font-bold text-pink-600 mb-4">Comments</h3>
+    <div className="max-w-2xl mx-auto mt-10 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl text-white">
+      <h3 className="text-xl font-bold text-pink-400 mb-6">Comments</h3>
 
-        {/* Create Comment Section */}
       {user ? (
         <form onSubmit={handleSubmit} className="space-y-4">
           <textarea
@@ -142,12 +135,12 @@ export const CommentSection = ({ postId }: Props) => {
             rows={3}
             placeholder="Write a comment..."
             onChange={(e) => setNewCommentText(e.target.value)}
-            className="w-full p-3 border border-pink-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500"
+            className="w-full p-3 border border-pink-500 rounded-lg bg-zinc-950 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-pink-500"
           />
           <button
             type="submit"
             disabled={!newCommentText || isPending}
-            className="bg-pink-500 text-white font-semibold px-5 py-2 rounded-full hover:bg-pink-600 transition disabled:opacity-50"
+            className="bg-pink-600 text-white font-semibold px-5 py-2 rounded-full hover:bg-pink-700 transition disabled:opacity-50"
           >
             {isPending ? "Posting..." : "Post Comment"}
           </button>
@@ -156,17 +149,16 @@ export const CommentSection = ({ postId }: Props) => {
           )}
         </form>
       ) : (
-        <p className="text-sm text-gray-600 italic">
+        <p className="text-sm text-zinc-400 italic">
           You must be logged in to post a comment.
         </p>
       )}
 
-      {/* Comments Display Section */}
-
-      <div>{commentTree.map((comment, key) => (
-        <CommentItem key={key} comment={comment} postId={postId}/>
-      ))}</div>
-
+      <div className="mt-8 space-y-6">
+        {commentTree.map((comment, key) => (
+          <CommentItem key={key} comment={comment} postId={postId} />
+        ))}
+      </div>
     </div>
   );
 };

@@ -8,7 +8,7 @@ import { BestiesList } from "./components/BestiesList";
 function App() {
   return (
     <BrowserRouter>
-      <div className="bg-gradient-to-br from-[#fff0b8] via-[#fdf5c3] to-[#fcf2b3] min-h-screen font-sans text-gray-800">
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-[#0f0f0f] font-sans text-white">
         <Navbar />
         <main className="max-w-5xl mx-auto px-4 pt-8 pb-12">
           <Routes>
