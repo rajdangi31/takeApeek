@@ -174,6 +174,9 @@ serve(async (req) => {
             }
 
             console.log('📤 Sending to:', user.id)
+            console.log('📦 Final payload to send:', JSON.stringify(payload))
+            console.log('📬 Subscription object:', JSON.stringify(subscription))
+
             await webpush.sendNotification(subscription, JSON.stringify(payload))
             console.log('✅ Sent to:', user.id)
 
