@@ -1,33 +1,39 @@
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "./supabase-client";
+// src/usePushNotifications.ts
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from './supabase-client'
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 
-const VAPID_PUBLIC =
-  "BET5ATiCATxFgwqYU90xcd9Yn6IUYD4iXpofAMiTg468njArKR5tVBtZSS6arzrNIqdNn2o8U1ryikwxN7_QBGQ";
+// 👉 read from .env
+const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
+if (!VAPID_PUBLIC) {
+  console.error(
+    '❌  VITE_VAPID_PUBLIC_KEY not found in env. Push subscriptions will fail.'
+  )
+}
 
 /** Convert a URL-safe Base-64 key to the Uint8Array Push API expects */
 function urlBase64ToUint8Array(base64: string) {
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const base64Safe = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64Safe);
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4)
+  const base64Safe = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64Safe)
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)))
 }
 
 /** Check for **minimum** Push-API support (https + SW + PushManager) */
 function hasPushSupport() {
-  const secureContext =
-    location.protocol === "https:" ||
-    location.hostname === "localhost" ||
-    location.hostname === "127.0.0.1";
+  const secure =
+    location.protocol === 'https:' ||
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1'
   return (
-    secureContext &&
-    "serviceWorker" in navigator &&
-    "PushManager" in window &&
-    "Notification" in window
-  );
+    secure &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    'Notification' in window
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -36,160 +42,116 @@ function hasPushSupport() {
 
 export const usePushNotifications = (userId?: string) => {
   /* ---------- state ---------- */
-  const [isSupported, setIsSupported] = useState(false);
-  const [subscription, setSubscription] = useState<PushSubscription | null>(
-    null
-  );
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [lastError, setLastError] = useState<unknown>(null);
+  const [isSupported, setIsSupported] = useState(false)
+  const [subscription, setSubscription] = useState<PushSubscription | null>(null)
+  const [isSubscribed, setIsSubscribed] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [lastError, setLastError] = useState<unknown>(null)
 
-  /* ---------- initial feature-detection ---------- */
+  /* ---------- feature-detect once ---------- */
   useEffect(() => {
-    setIsSupported(hasPushSupport());
-  }, []);
+    setIsSupported(hasPushSupport())
+  }, [])
 
   /* ---------- helper to read existing sub ---------- */
   const checkSubscription = useCallback(async () => {
-    if (!isSupported) return;
+    if (!isSupported) return
     try {
-      const reg = await navigator.serviceWorker.ready;
-      const current = await reg.pushManager.getSubscription();
-      setSubscription(current);
-      setIsSubscribed(Boolean(current));
+      const reg = await navigator.serviceWorker.ready
+      const current = await reg.pushManager.getSubscription()
+      setSubscription(current)
+      setIsSubscribed(Boolean(current))
     } catch (err) {
-      console.error("⚠️  checkSubscription failed:", err);
-      setLastError(err);
+      console.error('checkSubscription failed:', err)
+      setLastError(err)
     }
-  }, [isSupported]);
+  }, [isSupported])
 
   useEffect(() => {
-    checkSubscription();
-  }, [checkSubscription]);
+    checkSubscription()
+  }, [checkSubscription])
 
   /* ---------- subscribe ---------- */
   const subscribeUser = useCallback(async () => {
-    console.log("🔔 subscribeUser called", { isSupported, userId });
-    
-    // Early return with proper loading reset
-    if (!isSupported) {
-      console.log("❌ Push not supported");
-      return;
+    if (!isSupported || !VAPID_PUBLIC) {
+      console.log('Push not supported or missing VAPID key')
+      return
     }
-    
     if (!userId) {
-      console.log("❌ No userId provided");
-      setLastError(new Error("User ID is required"));
-      return;
+      setLastError(new Error('User ID is required'))
+      return
     }
 
-    setLoading(true);
-    setLastError(null);
+    setLoading(true)
+    setLastError(null)
 
     try {
-      console.log("🔄 Getting service worker...");
-      
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Service worker timeout")), 10000);
-      });
-      
-      const reg = await Promise.race([
-        navigator.serviceWorker.ready,
-        timeoutPromise
-      ]) as ServiceWorkerRegistration;
-      
-      console.log("✅ Service worker ready:", reg);
+      const reg = await navigator.serviceWorker.ready
 
-      /** Request browser permission first */
-      console.log("🔔 Requesting notification permission...");
-      const permission = await Notification.requestPermission();
-      console.log("🔔 Permission result:", permission);
-      
-      if (permission !== "granted") {
-        throw new Error(`Notification permission was ${permission}`);
-      }
+      // Ask permission first
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted')
+        throw new Error(`Notification permission: ${permission}`)
 
-      console.log("🔔 Subscribing to push manager...");
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
-      });
-      
-      console.log("✅ Push subscription created:", sub);
+      // Subscribe (or reuse)
+      const sub =
+        (await reg.pushManager.getSubscription()) ??
+        (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
+        }))
 
-      /* Store in DB */
-      /* Store in DB */
-console.log("💾 Saving to database...");
-const { error } = await supabase
-  .from("user_profiles")
-  .update({
-    push_subscription: JSON.stringify(sub.toJSON()),
-    push_enabled: true,
-  })
-  .eq("id", userId);
+      // Persist
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          push_subscription: JSON.stringify(sub.toJSON()),
+          push_enabled: true,
+        })
+        .eq('id', userId)
 
+      if (error) throw error
 
-      if (error) {
-        console.error("❌ Database error:", error);
-        throw error;
-      }
-      
-      console.log("✅ Saved to database successfully");
-
-      /* Local state */
-      setSubscription(sub);
-      setIsSubscribed(true);
-      
-      console.log("🎉 Subscription complete!");
-      
+      setSubscription(sub)
+      setIsSubscribed(true)
     } catch (err) {
-      console.error("⚠️  subscribeUser failed:", err);
-      setLastError(err);
+      console.error('subscribeUser failed:', err)
+      setLastError(err)
     } finally {
-      console.log("🔄 Setting loading to false");
-      setLoading(false);
+      setLoading(false)
     }
-  }, [isSupported, userId]);
+  }, [isSupported, userId])
 
   /* ---------- unsubscribe ---------- */
   const unsubscribeUser = useCallback(async () => {
-    if (!subscription || !userId) return;
-    setLoading(true);
-    setLastError(null);
+    if (!subscription || !userId) return
+    setLoading(true)
+    setLastError(null)
 
     try {
-      await subscription.unsubscribe();
-
+      await subscription.unsubscribe()
       const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          push_subscription: null,
-          push_enabled: false,
-        })
-        .eq("id", userId);
-
-      if (error) throw error;
-
-      setSubscription(null);
-      setIsSubscribed(false);
+        .from('user_profiles')
+        .update({ push_subscription: null, push_enabled: false })
+        .eq('id', userId)
+      if (error) throw error
+      setSubscription(null)
+      setIsSubscribed(false)
     } catch (err) {
-      console.error("⚠️  unsubscribeUser failed:", err);
-      setLastError(err);
+      console.error('unsubscribeUser failed:', err)
+      setLastError(err)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [subscription, userId]);
+  }, [subscription, userId])
 
   return {
-    /* state */
     isSupported,
     isSubscribed,
     loading,
     lastError,
-    /* actions */
     subscribeUser,
     unsubscribeUser,
     checkSubscription,
-  };
-};
+  }
+}

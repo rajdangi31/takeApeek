@@ -1,178 +1,139 @@
 // src/services/notificationService.ts
 import { supabase } from '../supabase-client'
 
-const VAPID_PUBLIC_KEY = 'BEUFQQcYV4NcHzw2XpCG7Dv3UgqUSzwqSl9QK2ZeHfSeXJN7gjq8SgPf06lD2ACnRT7Kml8H1a8qVW7yUWKMqEHbGw=='
-
-// Convert VAPID key to Uint8Array
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4)
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/')
-
-  const rawData = window.atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i)
-  }
-  return outputArray
+/* -------------------------------------------------- */
+/*  PUBLIC VAPID KEY                                  */
+/* -------------------------------------------------- */
+//  👉  Make sure .env contains:
+//      VITE_VAPID_PUBLIC_KEY=<your-public-key>
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string
+if (!VAPID_PUBLIC_KEY) {
+  // Hard-stop in dev – the browser can’t subscribe without it
+  console.error(
+    '❌  VITE_VAPID_PUBLIC_KEY is not defined. ' +
+    'Add it to your .env and restart Vite.'
+  )
 }
 
+/* -------------------------------------------------- */
+/*  Helper: convert Base-64 to Uint8Array              */
+/* -------------------------------------------------- */
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = window.atob(base64)
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)))
+}
+
+/* -------------------------------------------------- */
+/*  Notification Service                              */
+/* -------------------------------------------------- */
 export class NotificationService {
+  /* ---------- permission helpers ---------- */
   static async requestPermission(): Promise<boolean> {
-    if (!('Notification' in window)) {
-      console.log('This browser does not support notifications')
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+      console.log('Notifications or Service Workers not supported')
       return false
     }
 
-    if (!('serviceWorker' in navigator)) {
-      console.log('This browser does not support service workers')
-      return false
-    }
-
-    // Check current permission
-    if (Notification.permission === 'granted') {
-      return true
-    }
-
-    if (Notification.permission === 'denied') {
-      return false
-    }
-
-    // Request permission
-    const permission = await Notification.requestPermission()
-    return permission === 'granted'
+    if (Notification.permission === 'granted') return true
+    if (Notification.permission === 'denied') return false
+    return (await Notification.requestPermission()) === 'granted'
   }
 
+  /* ---------- service-worker register ---------- */
   static async registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-    if (!('serviceWorker' in navigator)) {
-      return null
-    }
-
+    if (!('serviceWorker' in navigator)) return null
     try {
-      const registration = await navigator.serviceWorker.register('/sw.js')
-      console.log('Service Worker registered successfully')
-      return registration
-    } catch (error) {
-      console.error('Service Worker registration failed:', error)
+      return await navigator.serviceWorker.register('/sw.js')
+    } catch (err) {
+      console.error('SW registration failed:', err)
       return null
     }
   }
 
+  /* ---------- subscribe ---------- */
   static async subscribeToPush(userId: string): Promise<boolean> {
     try {
-      const hasPermission = await this.requestPermission()
-      if (!hasPermission) {
-        throw new Error('Notification permission denied')
-      }
+      if (!VAPID_PUBLIC_KEY) throw new Error('Missing VAPID public key')
+      if (!(await this.requestPermission())) throw new Error('Permission denied')
 
-      const registration = await this.registerServiceWorker()
-      if (!registration) {
-        throw new Error('Service Worker registration failed')
-      }
+      const reg = await this.registerServiceWorker()
+      if (!reg) throw new Error('SW registration failed')
 
-      // Check if already subscribed
-      let subscription = await registration.pushManager.getSubscription()
-      
-      if (!subscription) {
-        // Create new subscription
-        subscription = await registration.pushManager.subscribe({
+      let sub = await reg.pushManager.getSubscription()
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
         })
       }
 
-      // Save subscription to database
       const { error } = await supabase
         .from('user_profiles')
-        .update({ 
-          push_subscription: JSON.stringify(subscription.toJSON()),
-          push_enabled: true 
+        .update({
+          push_subscription: JSON.stringify(sub.toJSON()),
+          push_enabled: true,
         })
         .eq('id', userId)
 
-      if (error) {
-        console.error('Error saving subscription:', error)
-        return false
-      }
-
-      console.log('Push subscription saved successfully')
+      if (error) throw error
+      console.log('✅ Push subscription saved')
       return true
-
-    } catch (error) {
-      console.error('Error subscribing to push notifications:', error)
+    } catch (err) {
+      console.error('Subscribe error:', err)
       return false
     }
   }
 
+  /* ---------- unsubscribe ---------- */
   static async unsubscribeFromPush(userId: string): Promise<boolean> {
     try {
-      const registration = await navigator.serviceWorker.getRegistration()
-      if (!registration) return true
+      const reg = await navigator.serviceWorker.getRegistration()
+      const sub = await reg?.pushManager.getSubscription()
+      await sub?.unsubscribe()
 
-      const subscription = await registration.pushManager.getSubscription()
-      if (subscription) {
-        await subscription.unsubscribe()
-      }
-
-      // Remove subscription from database
       const { error } = await supabase
         .from('user_profiles')
-        .update({ 
-          push_subscription: null,
-          push_enabled: false 
-        })
+        .update({ push_subscription: null, push_enabled: false })
         .eq('id', userId)
 
-      if (error) {
-        console.error('Error removing subscription:', error)
-        return false
-      }
-
+      if (error) throw error
       return true
-    } catch (error) {
-      console.error('Error unsubscribing from push notifications:', error)
+    } catch (err) {
+      console.error('Unsubscribe error:', err)
       return false
     }
   }
 
+  /* ---------- invoke edge function ---------- */
   static async sendNotificationToBesties(
-    userId: string, 
-    title?: string, 
-    message?: string, 
+    userId: string,
+    title?: string,
+    message?: string,
     url?: string
   ): Promise<boolean> {
     try {
-      const { data, error } = await supabase.functions.invoke('send-notifications', {
-        body: { userId, title, message, url }
-      })
-
-      if (error) {
-        console.error('Error sending notifications:', error)
-        return false
-      }
-
-      console.log('Notifications sent:', data)
+      const { data, error } = await supabase.functions.invoke(
+        'send-notifications',
+        { body: { userId, title, message, url } }
+      )
+      if (error) throw error
+      console.log('Edge function result:', data)
       return true
-    } catch (error) {
-      console.error('Error calling notification function:', error)
+    } catch (err) {
+      console.error('sendNotificationToBesties error:', err)
       return false
     }
   }
 
+  /* ---------- simple helper ---------- */
   static async isSubscribed(userId: string): Promise<boolean> {
-    try {
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('push_enabled')
-        .eq('id', userId)
-        .single()
-
-      return data?.push_enabled || false
-    } catch (error) {
-      console.error('Error checking subscription status:', error)
-      return false
-    }
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('push_enabled')
+      .eq('id', userId)
+      .single()
+    return data?.push_enabled ?? false
   }
 }
