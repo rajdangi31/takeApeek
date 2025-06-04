@@ -1,16 +1,15 @@
 // supabase/functions/send-notifications/index.ts
-// @ts-nocheck  (Edge runtime – no Node typings)
+// @ts-nocheck (Edge runtime – no Node typings)
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
 /* ────────────────────────────────────────────────────────── */
-/*  Runtime env                                              */
+/*  Runtime env                                               */
 /* ────────────────────────────────────────────────────────── */
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -25,51 +24,63 @@ if (!VAPID_PRIVATE_KEY || !VAPID_PUBLIC_KEY)
 const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
 /* ────────────────────────────────────────────────────────── */
-/*  Helper – safe sub parse                                   */
+/*  Helper – safe subscription validator                      */
 /* ────────────────────────────────────────────────────────── */
-function parseSubscription(raw: unknown) {
-  if (!raw) throw new Error('push_subscription is null')
-  if (typeof raw === 'string') return JSON.parse(raw)
-  if (typeof raw === 'object') return raw
-  throw new Error('Un-recognised push_subscription format')
+function parseValidSubscription(raw: unknown) {
+  if (!raw) throw new Error('push_subscription is null or missing')
+
+  const sub = typeof raw === 'string' ? JSON.parse(raw) : raw
+
+  if (
+    typeof sub !== 'object' ||
+    typeof sub.endpoint !== 'string' ||
+    typeof sub.keys !== 'object' ||
+    typeof sub.keys.auth !== 'string' ||
+    typeof sub.keys.p256dh !== 'string'
+  ) {
+    throw new Error('Invalid push_subscription structure')
+  }
+
+  return sub
 }
 
 /* ────────────────────────────────────────────────────────── */
-/*  Handler                                                  */
+/*  Handler                                                   */
 /* ────────────────────────────────────────────────────────── */
 serve(async (req) => {
-  /* CORS pre-flight */
-  if (req.method === 'OPTIONS')
+  if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
 
   try {
-    const { userId, message, title, url } = await req.json()
+    const { userId, title, message, url } = await req.json()
     if (!userId) throw new Error('userId is required')
 
     /* ------------------------------------------------------ */
-    /*  1. Friend list                                        */
+    /*  1. Find accepted besties                              */
     /* ------------------------------------------------------ */
-    const { data: friends, error: bestieErr } = await supabaseAdmin
+    const { data: relations, error: relationErr } = await supabaseAdmin
       .from('besties')
       .select('user_id, bestie_id')
       .or(
         `and(user_id.eq.${userId},status.eq.accepted),and(bestie_id.eq.${userId},status.eq.accepted)`
       )
 
-    if (bestieErr) throw bestieErr
-    const friendIds =
-      friends?.map((r) =>
-        r.user_id === userId ? r.bestie_id : r.user_id
-      ) ?? []
+    if (relationErr) throw relationErr
 
-    if (friendIds.length === 0)
+    const friendIds = relations?.map((r) =>
+      r.user_id === userId ? r.bestie_id : r.user_id
+    ) ?? []
+
+    if (!friendIds.length) {
       return new Response(
         JSON.stringify({ message: 'No besties to notify' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
 
     /* ------------------------------------------------------ */
-    /*  2. Subscriptions                                      */
+    /*  2. Fetch their push subscriptions                     */
     /* ------------------------------------------------------ */
     const { data: subs, error: subErr } = await supabaseAdmin
       .from('user_profiles')
@@ -78,14 +89,15 @@ serve(async (req) => {
       .not('push_subscription', 'is', null)
 
     if (subErr) throw subErr
-    if (!subs?.length)
+    if (!subs?.length) {
       return new Response(
         JSON.stringify({ message: 'No besties have push enabled' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
 
     /* ------------------------------------------------------ */
-    /*  3. Poster name                                        */
+    /*  3. Get poster display name                            */
     /* ------------------------------------------------------ */
     const { data: poster } = await supabaseAdmin
       .from('user_profiles')
@@ -97,11 +109,10 @@ serve(async (req) => {
       poster?.user_name || poster?.email?.split('@')[0] || 'Someone'
 
     /* ------------------------------------------------------ */
-    /*  4. Web-push setup                                     */
+    /*  4. Setup WebPush                                      */
     /* ------------------------------------------------------ */
-    const { default: webpush } = await import(
-      'https://esm.sh/web-push@3.6.6'
-    )
+    const { default: webpush } = await import('https://esm.sh/web-push@3.6.6')
+
     webpush.setVapidDetails(
       'mailto:dangiprince263@gmail.com',
       VAPID_PUBLIC_KEY,
@@ -109,48 +120,50 @@ serve(async (req) => {
     )
 
     /* ------------------------------------------------------ */
-    /*  5. Fan-out                                            */
+    /*  5. Send notifications                                 */
     /* ------------------------------------------------------ */
-    const sendAll = subs.map(async (user) => {
-      try {
-        const subscription = parseSubscription(user.push_subscription)
+    const results = await Promise.allSettled(
+      subs.map(async (user) => {
+        try {
+          const subscription = parseValidSubscription(user.push_subscription)
 
-        const payload = {
-          title: title || `${posterName} shared a new peek! 👀`,
-          body: message || `Check out what ${posterName} is up to`,
-          icon: '/icon-192x192.png',
-          badge: '/badge-72x72.png',
-          url: url || '/',
-          tag: 'new-peek',
+          const payload = {
+            title: title || `${posterName} shared a new peek! 👀`,
+            body: message || `Check out what ${posterName} is up to`,
+            icon: '/icon-192x192.png',
+            badge: '/badge-72x72.png',
+            url: url || '/',
+            tag: 'new-peek',
+          }
+
+          await webpush.sendNotification(subscription, JSON.stringify(payload))
+
+          return { success: true, userId: user.id }
+        } catch (err) {
+          return {
+            success: false,
+            userId: user.id,
+            error: err?.message || String(err),
+          }
         }
+      })
+    )
 
-        await webpush.sendNotification(
-          subscription,
-          JSON.stringify(payload)
-        )
+    const formatted = results.map((r) =>
+      r.status === 'fulfilled' ? r.value : { success: false, error: 'Promise failed' }
+    )
 
-        return { success: true, userId: user.id }
-      } catch (err) {
-        return {
-          success: false,
-          userId: user.id,
-          error: err?.message ?? String(err),
-        }
-      }
-    })
-
-    const results = await Promise.all(sendAll)
-    const successCount = results.filter((r) => r.success).length
+    const count = formatted.filter((r) => r.success).length
 
     return new Response(
-      JSON.stringify({ message: `Sent ${successCount} notifications`, results }),
+      JSON.stringify({ message: `Sent ${count} notifications`, results: formatted }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err) {
-    console.error('Function error:', err)
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    console.error('❌ send-notifications error:', err)
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 })
