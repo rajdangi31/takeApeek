@@ -97,7 +97,7 @@ serve(async (req) => {
     })
 
     // 5. For each subscriber, POST to your Vercel push server
-    const PUSH_URL = 'https://<your-vercel-project>.vercel.app/api/send'
+    const PUSH_URL = 'https://take-apeek-20jmuf2m5-raj-s-projects-40feb981.vercel.app/api/send'
     const results = await Promise.allSettled(
       subs.map(async (user) => {
         try {
