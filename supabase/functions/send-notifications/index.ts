@@ -20,7 +20,11 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { userId, message, title, url } = await req.json()
+    // Parse the request body properly
+    const requestBody = await req.json()
+    console.log('Received request body:', requestBody)
+    
+    const { userId, message, title, url } = requestBody
 
     if (!userId) {
       throw new Error('userId is required')
@@ -78,7 +82,19 @@ serve(async (req) => {
     // Send notifications to each subscription
     const notificationPromises = subscriptions?.map(async (user) => {
       try {
-        const subscription = JSON.parse(user.push_subscription)
+        // Handle push_subscription parsing safely
+        let subscription
+        if (typeof user.push_subscription === 'string') {
+          // If it's a string, parse it
+          subscription = JSON.parse(user.push_subscription)
+        } else if (typeof user.push_subscription === 'object' && user.push_subscription !== null) {
+          // If it's already an object, use it directly
+          subscription = user.push_subscription
+        } else {
+          throw new Error('Invalid push subscription format')
+        }
+        
+        console.log('Processing subscription for user:', user.id)
         
         const notificationPayload = {
           title: title || `${posterName} shared a new peek! 👀`,
@@ -113,12 +129,16 @@ serve(async (req) => {
     }) || []
 
     const results = await Promise.allSettled(notificationPromises)
-    const successCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length
+    const resolvedResults = results.map(r => 
+      r.status === 'fulfilled' ? r.value : { success: false, error: 'Promise rejected' }
+    )
+    
+    const successCount = resolvedResults.filter(r => r.success).length
 
     return new Response(
       JSON.stringify({ 
         message: `Sent ${successCount} notifications to besties`,
-        results: results.map(r => r.status === 'fulfilled' ? r.value : { success: false, error: 'Promise rejected' })
+        results: resolvedResults
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
