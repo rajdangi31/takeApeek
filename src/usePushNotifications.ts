@@ -119,14 +119,16 @@ export const usePushNotifications = (userId?: string) => {
       console.log("✅ Push subscription created:", sub);
 
       /* Store in DB */
-      console.log("💾 Saving to database...");
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          push_subscription: sub.toJSON(),
-          push_enabled: true,
-        })
-        .eq("id", userId);
+      /* Store in DB */
+console.log("💾 Saving to database...");
+const { error } = await supabase
+  .from("user_profiles")
+  .update({
+    push_subscription: JSON.stringify(sub.toJSON()),
+    push_enabled: true,
+  })
+  .eq("id", userId);
+
 
       if (error) {
         console.error("❌ Database error:", error);
