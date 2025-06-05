@@ -1,16 +1,10 @@
 {
-  "version": 2,
-
-  "headers": [
-   
-    {
-      "source": "/api/send",
-      "headers": [
-        { "key": "x-vercel-protection-bypass", "value": "1" }
-      ]
-    },
-
+  "version": 2,                     
+  "overrides": {
     
+    "api/send.js": { "protected": false }
+  },
+  "headers": [
     {
       "source": "/sw.js",
       "headers": [
