@@ -97,7 +97,11 @@ serve(async (req) => {
     })
 
     // 5. For each subscriber, POST to your Vercel push server
-    const PUSH_URL = 'https://take-apeek-20jmuf2m5-raj-s-projects-40feb981.vercel.app/api/send'
+    // supabase/functions/send-notifications/index.ts
+const PUSH_URL =
+  Deno.env.get('PUSH_SERVER_URL') ??
+  'https://take-apeek-git-pwa-notifications-raj-s-projects-40feb981.vercel.app';
+
     const results = await Promise.allSettled(
       subs.map(async (user) => {
         try {
