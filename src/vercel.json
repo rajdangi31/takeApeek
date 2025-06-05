@@ -1,19 +1,19 @@
 {
+  
+  "overrides": {
+    "api/send.js": {
+      "protected": false           
+        }
+  },
+
+  
   "headers": [
     {
-      "source": "/api/send",
-      "headers": [
-        {
-          "key": "x-vercel-protection-bypass",
-          "value": "1"
-        }
-      ]
-    },
-    {
+   
       "source": "/sw.js",
       "headers": [
         { "key": "Service-Worker-Allowed", "value": "/" },
-        { "key": "Cache-Control", "value": "no-cache, no-store" }
+        { "key": "Cache-Control",        "value": "no-cache, no-store, must-revalidate" }
       ]
     }
   ]
