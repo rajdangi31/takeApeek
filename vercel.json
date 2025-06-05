@@ -1,20 +1,17 @@
 {
   "version": 2,
+  "functions": {
+    "api/send.js": {
+      "runtime": "nodejs18.x",
+      "protected": false
+    }
+  },
   "headers": [
-    {
-      "source": "/api/send",
-      "headers": [
-        {
-          "key": "x-vercel-protection-bypass",
-          "value": "1"
-        }
-      ]
-    },
     {
       "source": "/sw.js",
       "headers": [
-        { "key": "Service-Worker-Allowed",   "value": "/" },
-        { "key": "Cache-Control",             "value": "no-cache, no-store, must-revalidate" }
+        { "key": "Service-Worker-Allowed", "value": "/" },
+        { "key": "Cache-Control",         "value": "no-cache, no-store, must-revalidate" }
       ]
     }
   ]
