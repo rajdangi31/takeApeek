@@ -6,8 +6,23 @@ import { useAuth } from '../contexts/AuthContext';
 export const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { signInWithGoogle, signOut, user } = useAuth();
-
   const displayName = user?.user_metadata.user_name || user?.email?.split('@')[0];
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Sign-in failed:', error);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Sign-out failed:', error);
+    }
+  };
 
   return (
     <motion.nav
@@ -51,7 +66,7 @@ export const Navbar = () => {
               )}
               <span className="text-sm text-white font-medium">{displayName}</span>
               <motion.button
-                onClick={signOut}
+                onClick={handleSignOut}
                 className="text-sm text-neon-pink hover:text-neon-pink/80 transition"
                 whileHover={{ scale: 1.05 }}
               >
@@ -60,7 +75,7 @@ export const Navbar = () => {
             </div>
           ) : (
             <motion.button
-              onClick={signInWithGoogle}
+              onClick={handleSignIn}
               className="bg-gradient-to-r from-neon-pink to-neon-purple text-white px-4 py-1.5 rounded-full hover:from-neon-purple hover:to-neon-pink transition text-sm font-semibold shadow-glow"
               whileHover={{ scale: 1.05 }}
             >
@@ -131,7 +146,7 @@ export const Navbar = () => {
             <div className="pt-4 border-t border-neon-pink/50">
               {user ? (
                 <motion.button
-                  onClick={signOut}
+                  onClick={handleSignOut}
                   className="w-full bg-gradient-to-r from-neon-pink to-neon-purple text-white px-4 py-2 rounded-full hover:from-neon-purple hover:to-neon-pink font-semibold shadow-glow"
                   whileHover={{ scale: 1.05 }}
                 >
@@ -139,7 +154,7 @@ export const Navbar = () => {
                 </motion.button>
               ) : (
                 <motion.button
-                  onClick={signInWithGoogle}
+                  onClick={handleSignIn}
                   className="w-full bg-gradient-to-r from-neon-pink to-neon-purple text-white px-4 py-2 rounded-full hover:from-neon-purple hover:to-neon-pink font-semibold shadow-glow"
                   whileHover={{ scale: 1.05 }}
                 >
