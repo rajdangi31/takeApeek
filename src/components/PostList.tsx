@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "../supabase-client";
-import { PostItem } from "./PostItem";
-import { useAuth } from "../contexts/AuthContext";
+import { useQuery } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import { supabase } from '../supabase-client';
+import { PostItem } from './PostItem';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface Peeks {
   id: number;
@@ -17,9 +18,9 @@ export interface Peeks {
 
 const fetchBestiesPosts = async (userId: string): Promise<Peeks[]> => {
   const { data: besties, error: bestiesError } = await supabase
-    .from("besties")
-    .select("user_id, bestie_id")
-    .eq("status", "accepted")
+    .from('besties')
+    .select('user_id, bestie_id')
+    .eq('status', 'accepted')
     .or(`user_id.eq.${userId},bestie_id.eq.${userId}`);
 
   if (bestiesError) throw new Error(bestiesError.message);
@@ -33,15 +34,15 @@ const fetchBestiesPosts = async (userId: string): Promise<Peeks[]> => {
   bestieIds.add(userId);
 
   const { data: userProfiles, error: profileError } = await supabase
-    .from("user_profiles")
-    .select("id, email")
-    .in("id", Array.from(bestieIds));
+    .from('user_profiles')
+    .select('id, email')
+    .in('id', Array.from(bestieIds));
 
   if (profileError) throw new Error(profileError.message);
 
   const bestieEmails = userProfiles?.map((profile) => profile.email) || [];
 
-  const { data, error } = await supabase.rpc("get_posts_with_counts");
+  const { data, error } = await supabase.rpc('get_posts_with_counts');
 
   if (error) throw new Error(error.message);
 
@@ -53,7 +54,7 @@ export const PostList = () => {
   const { user } = useAuth();
 
   const { data, error, isLoading } = useQuery<Peeks[], Error>({
-    queryKey: ["peeks", "besties", user?.id],
+    queryKey: ['peeks', 'besties', user?.id],
     queryFn: () => {
       if (!user) return [];
       return fetchBestiesPosts(user.id);
@@ -65,20 +66,29 @@ export const PostList = () => {
     emoji,
     title,
     description,
-    color = "pink",
+    color = 'neon-pink',
   }: {
     emoji: string;
     title: string;
     description: string;
-    color?: "pink" | "red";
+    color?: 'neon-pink' | 'red';
   }) => (
-    <div
-      className={`bg-gradient-to-br from-${color}-900/30 to-${color}-700/20 text-white/90 backdrop-blur-xl border border-${color}-500/30 rounded-3xl max-w-md mx-auto p-8 shadow-xl`}
+    <motion.div
+      className={`bg-gradient-to-br from-${color}-900/30 to-${color}-700/20 text-white/90 backdrop-blur-xl border border-${color}-500/30 rounded-3xl max-w-md mx-auto p-8 shadow-neumorphic`}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
     >
-      <div className="text-6xl mb-4 text-center">{emoji}</div>
+      <motion.div
+        className="text-6xl mb-4 text-center"
+        animate={{ scale: [1, 1.2, 1] }}
+        transition={{ duration: 1.5, repeat: Infinity }}
+      >
+        {emoji}
+      </motion.div>
       <h3 className="text-xl font-bold text-center mb-2">{title}</h3>
       <p className="text-sm text-center text-white/70">{description}</p>
-    </div>
+    </motion.div>
   );
 
   if (!user) {
@@ -131,10 +141,15 @@ export const PostList = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      className="space-y-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
       {data.map((post, key) => (
         <PostItem post={post} key={key} />
       ))}
-    </div>
+    </motion.div>
   );
 };

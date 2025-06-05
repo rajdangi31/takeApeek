@@ -1,7 +1,8 @@
-import { useState, type ChangeEvent } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { supabase } from "../supabase-client";
-import { useAuth } from "../contexts/AuthContext";
+import { useState, type ChangeEvent } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import { supabase } from '../supabase-client';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PostInput {
   title: string;
@@ -12,8 +13,8 @@ interface PostInput {
 
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d")!;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
     const img = new Image();
 
     img.onload = () => {
@@ -32,11 +33,15 @@ const compressImage = (file: File): Promise<File> => {
       canvas.height = height;
       ctx.drawImage(img, 0, 0, width, height);
 
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(new File([blob], file.name, { type: "image/jpeg" }));
-        } else resolve(file);
-      }, "image/jpeg", 0.8);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+          } else resolve(file);
+        },
+        'image/jpeg',
+        0.8
+      );
     };
 
     img.src = URL.createObjectURL(file);
@@ -45,22 +50,22 @@ const compressImage = (file: File): Promise<File> => {
 
 const sharePeek = async (post: PostInput, imageFile: File) => {
   const compressed = await compressImage(imageFile);
-  const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, "_")}-${Date.now()}-${compressed.name}`;
+  const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}-${compressed.name}`;
 
   const { error: uploadError } = await supabase.storage
-    .from("peeks")
+    .from('peeks')
     .upload(filePath, compressed);
 
   if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
   const { data: publicURLData } = supabase.storage
-    .from("peeks")
+    .from('peeks')
     .getPublicUrl(filePath);
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData?.user) throw new Error("User not authenticated");
+  if (userError || !userData?.user) throw new Error('User not authenticated');
 
-  const { error } = await supabase.from("Peeks").insert({
+  const { error } = await supabase.from('Peeks').insert({
     ...post,
     image_url: publicURLData.publicUrl,
     user_email: userData.user.email,
@@ -70,25 +75,25 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
 };
 
 export const SharePeek = () => {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState('');
   const { user } = useAuth();
 
   const { mutate, isPending, isError, isSuccess } = useMutation({
     mutationFn: (data: { post: PostInput; imageFile: File }) =>
       sharePeek(data.post, data.imageFile),
     onSuccess: () => {
-      setTitle("");
-      setContent("");
+      setTitle('');
+      setContent('');
       setSelectedFile(null);
-      setErrorMessage("");
-      const input = document.getElementById("image") as HTMLInputElement;
-      if (input) input.value = "";
+      setErrorMessage('');
+      const input = document.getElementById('image') as HTMLInputElement;
+      if (input) input.value = '';
     },
     onError: (error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Unknown error");
+      setErrorMessage(error instanceof Error ? error.message : 'Unknown error');
     },
   });
 
@@ -97,20 +102,20 @@ export const SharePeek = () => {
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024)
-      return setErrorMessage("File too large. Keep it under 10MB.");
+      return setErrorMessage('File too large. Keep it under 10MB.');
 
-    if (!file.type.startsWith("image/"))
-      return setErrorMessage("Only image files are allowed.");
+    if (!file.type.startsWith('image/'))
+      return setErrorMessage('Only image files are allowed.');
 
     setSelectedFile(file);
-    setErrorMessage("");
+    setErrorMessage('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) return;
 
-    setErrorMessage("");
+    setErrorMessage('');
     mutate({
       post: {
         title,
@@ -122,50 +127,53 @@ export const SharePeek = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto space-y-8">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-pink-900/40 to-pink-700/20 border border-pink-400/40 shadow-xl rounded-3xl p-6 text-center text-white">
-        <div className="text-5xl mb-3">📸</div>
+    <motion.div
+      className="max-w-md mx-auto space-y-8"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
+      <motion.div
+        className="bg-gradient-to-br from-neon-pink/20 to-neon-purple/20 border border-neon-pink/30 shadow-glow rounded-3xl p-6 text-center text-white backdrop-blur-md"
+        whileHover={{ scale: 1.02 }}
+      >
+        <motion.div
+          className="text-5xl mb-3"
+          animate={{ y: [0, -10, 0], rotate: [0, 5, -5, 0] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        >
+          📸
+        </motion.div>
         <h1 className="text-2xl font-bold mb-1">Share a Peek!</h1>
-        <p className="text-sm text-pink-100">Let your besties know what you're up to</p>
-      </div>
-
-      {/* Form */}
+        <p className="text-sm text-neon-pink/80">Let your besties know what you're up to</p>
+      </motion.div>
       <form
         onSubmit={handleSubmit}
-        className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-3xl p-6 shadow-2xl space-y-6"
+        className="bg-dark-glass border border-neon-pink/20 backdrop-blur-md rounded-3xl p-6 shadow-neumorphic space-y-6"
       >
-        <div>
-          <label className="block text-pink-300 font-medium mb-2 text-sm">
-            📝 What's happening?
-          </label>
+        <motion.div initial={{ x: -20 }} animate={{ x: 0 }} transition={{ duration: 0.4 }}>
+          <label className="block text-neon-pink font-medium mb-2 text-sm">📝 What's happening?</label>
           <input
             type="text"
             value={title}
             required
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Give your peek a title..."
-            className="w-full px-4 py-3 rounded-xl bg-black/30 text-white border border-pink-400/40 placeholder-pink-300 focus:ring-2 focus:ring-pink-500 focus:outline-none"
+            className="w-full px-4 py-3 rounded-xl bg-dark-glass text-white border border-neon-pink/40 placeholder-neon-pink/50 focus:ring-2 focus:ring-neon-pink focus:outline-none"
           />
-        </div>
-
-        <div>
-          <label className="block text-pink-300 font-medium mb-2 text-sm">
-            💭 Add more context (optional)
-          </label>
+        </motion.div>
+        <motion.div initial={{ x: -20 }} animate={{ x: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+          <label className="block text-neon-pink font-medium mb-2 text-sm">💭 Add more context (optional)</label>
           <textarea
             rows={3}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Share what's on your mind..."
-            className="w-full px-4 py-3 rounded-xl bg-black/30 text-white border border-pink-400/40 placeholder-pink-300 resize-none focus:ring-2 focus:ring-pink-500 focus:outline-none"
+            className="w-full px-4 py-3 rounded-xl bg-dark-glass text-white border border-neon-pink/40 placeholder-neon-pink/50 resize-none focus:ring-2 focus:ring-neon-pink focus:outline-none"
           />
-        </div>
-
-        <div>
-          <label className="block text-pink-300 font-medium mb-2 text-sm">
-            📷 Upload an image
-          </label>
+        </motion.div>
+        <motion.div initial={{ x: -20 }} animate={{ x: 0 }} transition={{ duration: 0.4, delay: 0.2 }}>
+          <label className="block text-neon-pink font-medium mb-2 text-sm">📷 Upload an image</label>
           <input
             id="image"
             type="file"
@@ -177,21 +185,22 @@ export const SharePeek = () => {
           />
           <label
             htmlFor="image"
-            className="w-full cursor-pointer bg-gradient-to-r from-pink-600 to-pink-700 hover:from-pink-700 hover:to-pink-800 text-white font-semibold text-center py-3 px-6 rounded-xl block shadow-lg transition"
+            className="w-full cursor-pointer bg-gradient-to-r from-neon-pink to-neon-purple text-white font-semibold text-center py-3 px-6 rounded-xl block shadow-glow transition hover:from-neon-purple hover:to-neon-pink"
           >
-            {selectedFile ? `📸 ${selectedFile.name}` : "📸 Choose Photo"}
+            {selectedFile ? `📸 ${selectedFile.name}` : '📸 Choose Photo'}
           </label>
           {selectedFile && (
             <p className="text-green-400 text-sm mt-1">
               ✅ {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
             </p>
           )}
-        </div>
-
-        <button
+        </motion.div>
+        <motion.button
           type="submit"
           disabled={isPending || !selectedFile}
-          className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 disabled:from-gray-500 disabled:to-gray-700 text-white font-bold py-3 rounded-xl transition shadow-lg disabled:cursor-not-allowed"
+          className="w-full bg-gradient-to-r from-neon-pink to-neon-purple text-white font-bold py-3 rounded-xl transition shadow-glow hover:from-neon-purple hover:to-neon-pink disabled:from-gray-500 disabled:to-gray-700 disabled:cursor-not-allowed"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           {isPending ? (
             <span className="flex items-center justify-center gap-2">
@@ -201,20 +210,26 @@ export const SharePeek = () => {
           ) : (
             <span>✨ Share Peek!</span>
           )}
-        </button>
-
-        {/* Status messages */}
+        </motion.button>
         {isError && (
-          <div className="text-red-400 bg-red-900/30 border border-red-400/40 rounded-xl px-4 py-2 text-sm">
+          <motion.div
+            className="text-red-400 bg-red-900/30 border border-red-400/40 rounded-xl px-4 py-2 text-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
             <p>😞 {errorMessage}</p>
-          </div>
+          </motion.div>
         )}
         {isSuccess && (
-          <div className="text-green-400 bg-green-900/30 border border-green-400/40 rounded-xl px-4 py-2 text-sm">
+          <motion.div
+            className="text-green-400 bg-green-900/30 border border-green-400/40 rounded-xl px-4 py-2 text-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
             🎉 Peek shared successfully!
-          </div>
+          </motion.div>
         )}
       </form>
-    </div>
+    </motion.div>
   );
 };

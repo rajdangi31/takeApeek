@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { useAuth } from "../contexts/AuthContext";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "../supabase-client";
-import { CommentItem } from "./CommentItem";
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { useAuth } from '../contexts/AuthContext';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../supabase-client';
+import { CommentItem } from './CommentItem';
 
 interface Props {
   postId: number;
@@ -30,10 +31,10 @@ const createComment = async (
   author?: string
 ) => {
   if (!userId || !author) {
-    throw new Error("You must be logged in to comment.");
+    throw new Error('You must be logged in to comment.');
   }
 
-  const { error } = await supabase.from("comments").insert({
+  const { error } = await supabase.from('comments').insert({
     post_id: postId,
     content: newComment.content,
     parent_comment_id: newComment.parent_comment_id || null,
@@ -46,26 +47,22 @@ const createComment = async (
 
 const fetchComments = async (postId: number): Promise<Comment[]> => {
   const { data, error } = await supabase
-    .from("comments")
-    .select("*")
-    .eq("post_id", postId)
-    .order("created_at", { ascending: true });
+    .from('comments')
+    .select('*')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true });
 
   if (error) throw new Error(error.message);
   return data as Comment[];
 };
 
 export const CommentSection = ({ postId }: Props) => {
-  const [newCommentText, setNewCommentText] = useState<string>("");
+  const [newCommentText, setNewCommentText] = useState<string>('');
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const {
-    data: comments,
-    isLoading,
-    error,
-  } = useQuery<Comment[], Error>({
-    queryKey: ["comments", postId],
+  const { data: comments, isLoading, error } = useQuery<Comment[], Error>({
+    queryKey: ['comments', postId],
     queryFn: () => fetchComments(postId),
     refetchInterval: 5000,
   });
@@ -79,7 +76,7 @@ export const CommentSection = ({ postId }: Props) => {
         user?.user_metadata?.user_name || user?.email
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["comments", postId] });
+      queryClient.invalidateQueries({ queryKey: ['comments', postId] });
     },
   });
 
@@ -87,7 +84,7 @@ export const CommentSection = ({ postId }: Props) => {
     e.preventDefault();
     if (!newCommentText) return;
     mutate({ content: newCommentText, parent_comment_id: null });
-    setNewCommentText("");
+    setNewCommentText('');
   };
 
   const buildCommentTree = (
@@ -115,7 +112,7 @@ export const CommentSection = ({ postId }: Props) => {
   };
 
   if (isLoading) {
-    return <div className="text-center text-pink-400">Loading Comments...</div>;
+    return <div className="text-center text-neon-pink">Loading Comments...</div>;
   }
 
   if (error) {
@@ -125,40 +122,56 @@ export const CommentSection = ({ postId }: Props) => {
   const commentTree = comments ? buildCommentTree(comments) : [];
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl text-white">
-      <h3 className="text-xl font-bold text-pink-400 mb-6">Comments</h3>
-
+    <motion.div
+      className="max-w-2xl mx-auto mt-10 bg-dark-glass border border-neon-pink/30 rounded-2xl p-6 shadow-glow text-white"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <h3 className="text-xl font-bold text-neon-pink mb-6">Comments</h3>
       {user ? (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <motion.form
+          onSubmit={handleSubmit}
+          className="space-y-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
           <textarea
             value={newCommentText}
             rows={3}
             placeholder="Write a comment..."
             onChange={(e) => setNewCommentText(e.target.value)}
-            className="w-full p-3 border border-pink-500 rounded-lg bg-zinc-950 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-pink-500"
+            className="w-full p-3 border border-neon-pink/50 rounded-lg bg-dark-glass text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-neon-pink"
           />
-          <button
+          <motion.button
             type="submit"
             disabled={!newCommentText || isPending}
-            className="bg-pink-600 text-white font-semibold px-5 py-2 rounded-full hover:bg-pink-700 transition disabled:opacity-50"
+            className="bg-gradient-to-r from-neon-pink to-neon-purple text-white font-semibold px-5 py-2 rounded-full hover:from-neon-purple hover:to-neon-pink transition disabled:opacity-50 shadow-glow"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
-            {isPending ? "Posting..." : "Post Comment"}
-          </button>
+            {isPending ? 'Posting...' : 'Post Comment'}
+          </motion.button>
           {isError && (
             <p className="text-sm text-red-500 mt-1">Error posting comment.</p>
           )}
-        </form>
+        </motion.form>
       ) : (
-        <p className="text-sm text-zinc-400 italic">
+        <p className="text-sm text-gray-400 italic">
           You must be logged in to post a comment.
         </p>
       )}
-
-      <div className="mt-8 space-y-6">
+      <motion.div
+        className="mt-8 space-y-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
         {commentTree.map((comment, key) => (
           <CommentItem key={key} comment={comment} postId={postId} />
         ))}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
