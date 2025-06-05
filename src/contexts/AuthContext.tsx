@@ -1,53 +1,57 @@
 import type { User } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../supabase-client";
+
 interface AuthContextType {
-    user: User | null;
-    signInWithGoogle: () => void;
-    signOut: ()=> void;
+  user: User | null;
+  signInWithGoogle: () => void;
+  signOut: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({children} : {children : React.ReactNode})=> {
-    
-    const [user, setUser] = useState<User | null>(null);
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
 
-    useEffect(() => {
-        supabase.auth.getSession().then(({data: {session}}) => {
-            setUser(session?.user ?? null);
-        });
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
 
-        const {data: listener} = supabase.auth.onAuthStateChange((_, session) => {
-            setUser(session?.user ?? null);
-        })
+    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null);
+    });
 
-        return () => {
-            listener.subscription.unsubscribe();
-        }
-    }, [] )
-    
-
-    const signInWithGoogle = () => {
-        supabase.auth.signInWithOAuth({provider: "google" })
+    return () => {
+      listener.subscription.unsubscribe();
     };
+  }, []);
 
-    const signOut = () => {
-        supabase.auth.signOut();
-    };
+  const signInWithGoogle = () => {
+    const redirectTo = window.location.origin; // Ensures it stays on current environment
+    supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+      },
+    });
+  };
 
-    return (
-    <AuthContext.Provider value={{user, signInWithGoogle, signOut}}>
-        {" "}
-         {children}{" "} 
-         </AuthContext.Provider>
-    );    
+  const signOut = () => {
+    supabase.auth.signOut();
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, signInWithGoogle, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
-export const useAuth = () : AuthContextType => {
-    const context = useContext(AuthContext)
-    if (context === undefined) {
-        throw new Error("useAuth must be used within the AuthProvider")
-    }
-    return context
-}
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within the AuthProvider");
+  }
+  return context;
+};
