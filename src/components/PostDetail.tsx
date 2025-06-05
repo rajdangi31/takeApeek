@@ -72,25 +72,32 @@ export const PostDetail = ({ postId }: Props) => {
               )}
             </div>
           </div>
-          <h2 className="text-xl font-bold text-white drop-shadow-sm">
-            {username}
+          <h2 className="text-xl font-bold text-white drop-shadow-sm mt-10">
+            @{username}
           </h2>
         </div>
 
         {/* Content Area */}
-        <div className="pt-10 px-6 pb-6">
+        <div className="pt-10 px-6 pb-6 space-y-4">
+          {/* Post Title */}
+          {data?.title && (
+            <h3 className="text-center text-lg font-bold text-pink-700 bg-pink-50 rounded-xl py-2 px-4 border border-pink-100 shadow-sm">
+              {data.title}
+            </h3>
+          )}
+
           {/* Post Image */}
-          <div className="rounded-2xl overflow-hidden shadow-lg mb-4 bg-gray-100">
+          <div className="rounded-2xl overflow-hidden shadow-lg bg-gray-100">
             <img
               src={data?.image_url}
               alt={data?.title}
-              className="w-full aspect-square object-cover"
+              className="w-full object-contain max-h-[600px] mx-auto"
             />
           </div>
 
           {/* Caption */}
           {data?.content && (
-            <div className="mb-4">
+            <div>
               <p className="text-gray-700 text-sm leading-relaxed px-2 py-3 bg-pink-50 rounded-xl border border-pink-100">
                 {data.content}
               </p>
@@ -98,7 +105,7 @@ export const PostDetail = ({ postId }: Props) => {
           )}
 
           {/* Post Metadata */}
-          <div className="text-center text-xs text-gray-500 mb-4">
+          <div className="text-center text-xs text-gray-500">
             Posted on{" "}
             {new Date(data!.created_at).toLocaleDateString(undefined, {
               year: "numeric",
