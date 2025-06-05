@@ -1,14 +1,14 @@
 {
   "version": 2,
-  "functions": {
-    "api/send.js": {
-      "runtime": "nodejs18.x",
-      "unprotected": true
-    }
-  },
-  "headers": [
+  "routes": [
     {
-      "source": "/sw.js",
+      "src":  "/api/send",          
+      "methods": ["GET", "HEAD", "POST", "OPTIONS"],
+      "dest": "/api/send.js",
+      "sso": false
+    },
+    {
+      "src": "/sw\\.js$",
       "headers": [
         { "key": "Service-Worker-Allowed", "value": "/" },
         { "key": "Cache-Control",        "value": "no-cache, no-store, must-revalidate" }
