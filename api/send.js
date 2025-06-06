@@ -10,11 +10,9 @@ import dotenv from 'dotenv'
 // Load .env (local) or Vercel env vars (production / preview)
 dotenv.config()
 
-const {
-  VAPID_PUBLIC_KEY = '',
-  VAPID_PRIVATE_KEY = '',
-  NODE_ENV = 'development', // default so the file still runs locally
-} = process.env
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+
 
 if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
   console.warn(
