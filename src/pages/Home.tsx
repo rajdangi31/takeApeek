@@ -1,6 +1,5 @@
 import { PostList } from "../components/PostList";
-import { NotificationSettings } from "../components/NotificationSettings";
-
+import { NotificationButton } from "../components/NotificationButton";
 export const Home = () => {
   return (
     <div className="space-y-8">
@@ -21,7 +20,7 @@ export const Home = () => {
 
       {/* Notifications */}
       <div className="max-w-md mx-auto px-4">
-        <NotificationSettings />
+        <NotificationButton />
       </div>
 
       {/* Posts Feed */}
