@@ -2,17 +2,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../supabase-client";
 import { useAuth } from "../contexts/AuthContext";
 
+// ✨ CHANGED: Added postOwnerId to the props
 interface Props {
   postId: number;
+  postOwnerId: string; // The user ID of the person who created the post
 }
 
 interface Love {
   id: number;
   post_id: number;
   user_id: string;
-  loves: number;
+  loves: number; // Assuming 1 is for 'love'
 }
 
+// Your existing 'loves' function is perfect, no changes needed here.
 const loves = async (lovesValue: number, postId: number, userId: string) => {
   const { data: existingLove } = await supabase
     .from("loves")
@@ -52,40 +55,69 @@ const fetchLoves = async (postId: number): Promise<Love[]> => {
   return data as Love[];
 };
 
-export const LikeButton = ({ postId }: Props) => {
+// ✨ CHANGED: Destructure postOwnerId from props
+export const LikeButton = ({ postId, postOwnerId }: Props) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const {
-    data: Loves,
+    data: lovesData, // Renamed for clarity to avoid conflict with 'loves' function
     isLoading,
     error,
   } = useQuery<Love[], Error>({
     queryKey: ["loves", postId],
     queryFn: () => fetchLoves(postId),
-    refetchInterval: 5000,
   });
 
   const { mutate } = useMutation({
-    mutationFn: (lovesValue: number) => {
+    // ✨ CHANGED: The mutation now accepts an object to know if it's a "like" or "unlike"
+    mutationFn: (variables: { lovesValue: number; isLiking: boolean }) => {
       if (!user) throw new Error("You must be logged in to Love!");
-      return loves(lovesValue, postId, user.id);
+      return loves(variables.lovesValue, postId, user.id);
     },
-    onSuccess: () => {
+    // ✨ CHANGED: The onSuccess callback now handles the push notification
+    onSuccess: (_, variables) => {
+      // First, invalidate the query to update the UI immediately
       queryClient.invalidateQueries({ queryKey: ["loves", postId] });
+      
+      // Only send a notification if the action was a "like", not an "unlike"
+      if (variables.isLiking && user) {
+        // This is a "fire-and-forget" call. We don't need to wait for it.
+        // We also wrap it in a try/catch so a failed push doesn't crash the app.
+        try {
+          console.log("Triggering push notification for a new like...");
+          supabase.functions.invoke('trigger-bestie-push', {
+            body: {
+              actionType: 'LIKE',
+              actor: {
+                id: user.id,
+                // Ensure you have a username in your user_metadata in Supabase Auth
+                username: user.user_metadata?.username || 'Someone',
+              },
+              post: {
+                id: postId,
+                ownerId: postOwnerId,
+              }
+            }
+          });
+        } catch (pushError) {
+          console.error("Failed to trigger push notification:", pushError);
+        }
+      }
     },
   });
 
-  if (isLoading) return <div>Loading loves...</div>;
+  if (isLoading) return <div>Loading...</div>;
   if (error) return <div>Error: {error.message}</div>;
 
-  const likes = Loves?.filter((v) => v.loves === 1).length || 0;
-  const hasLoved = Loves?.some((v) => v.user_id === user?.id && v.loves === 1);
+  const likes = lovesData?.filter((v) => v.loves === 1).length || 0;
+  const hasLoved = lovesData?.some((v) => v.user_id === user?.id && v.loves === 1);
 
   return (
     <div className="text-center mt-2">
       <button
-        onClick={() => mutate(1)}
+        // ✨ CHANGED: Pass the new variables object to mutate
+        onClick={() => mutate({ lovesValue: 1, isLiking: !hasLoved })}
         className={`text-2xl transition-transform duration-200 ${
           hasLoved
             ? "text-pink-600 scale-110"

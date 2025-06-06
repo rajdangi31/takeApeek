@@ -69,7 +69,6 @@ export const BestiesList = () => {
 
           return {
             ...row,
-            // Show the friend's info - use email if user_name not available
             user_name: friendProfile?.user_name || friendProfile?.email || "Unknown User",
             avatar_url: friendProfile?.avatar_url || "/avatar-placeholder.png",
           };
@@ -81,8 +80,9 @@ export const BestiesList = () => {
   });
 
   /* ---------------- Send request ---------------- */
-  const addReq = useMutation<void, Error, string>({
-    mutationFn: async (email) => {
+  // ✨ CHANGED: The mutation function now returns the ID of the user being invited.
+  const addReq = useMutation<string, Error, string>({
+    mutationFn: async (email): Promise<string> => {
       if (!user) throw new Error("Not signed in");
       if (accepted.length >= MAX_BESTIES)
         throw new Error(`Max ${MAX_BESTIES} besties reached`);
@@ -128,16 +128,41 @@ export const BestiesList = () => {
         user_name: found.user_name ?? found.email?.split("@")[0] ?? "Unknown",
       });
       if (error) throw error;
+      
+      // ✨ CHANGED: Return the ID of the user receiving the request.
+      return found.id;
     },
-    onSuccess: () => {
+    // ✨ CHANGED: onSuccess now receives the targetUserId and triggers the push notification.
+    onSuccess: (targetUserId) => {
       setEmailToAdd("");
       qc.invalidateQueries({ queryKey: bestiesKey(user?.id) });
+
+      if (user) {
+        try {
+          console.log("Triggering push for new bestie request...");
+          supabase.functions.invoke('trigger-bestie-push', {
+            body: {
+              actionType: 'NEW_BESTIE_REQUEST',
+              actor: {
+                id: user.id,
+                username: user.user_metadata?.user_name || 'Someone',
+              },
+              targetUser: {
+                id: targetUserId,
+              }
+            }
+          });
+        } catch (pushError) {
+          console.error("Failed to trigger push notification:", pushError);
+        }
+      }
     },
   });
 
   /* ---------------- Accept request ---------------- */
-  const acceptReq = useMutation<void, Error, number>({
-    mutationFn: async (rowId) => {
+  // ✨ CHANGED: The mutation function now returns the ID of the original requester.
+  const acceptReq = useMutation<string, Error, number>({
+    mutationFn: async (rowId): Promise<string> => {
       if (!user) throw new Error("Not signed in");
 
       const { data: request } = await supabase
@@ -173,8 +198,34 @@ export const BestiesList = () => {
           requester?.email?.split("@")[0] ??
           "Unknown",
       });
+
+      // ✨ CHANGED: Return the ID of the user who sent the original request.
+      return request.user_id;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: bestiesKey(user?.id) }),
+    // ✨ CHANGED: onSuccess now receives the requesterId and triggers the push notification.
+    onSuccess: (requesterId) => {
+      qc.invalidateQueries({ queryKey: bestiesKey(user?.id) });
+
+      if (user) {
+        try {
+          console.log("Triggering push for accepted bestie request...");
+          supabase.functions.invoke('trigger-bestie-push', {
+            body: {
+              actionType: 'BESTIE_REQUEST_ACCEPTED',
+              actor: {
+                id: user.id,
+                username: user.user_metadata?.user_name || 'Someone',
+              },
+              targetUser: {
+                id: requesterId,
+              }
+            }
+          });
+        } catch (pushError) {
+          console.error("Failed to trigger push notification:", pushError);
+        }
+      }
+    },
   });
 
   /* ---------------- Remove / decline ---------------- */

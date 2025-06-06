@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query"; // Import useQueryClient
 import { supabase } from "../supabase-client";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -10,21 +10,23 @@ interface PostInput {
   avatar_url: string | null;
 }
 
-// Helper function to compress/resize image
+// ✨ NEW: Define the shape of the returned post object for type safety
+interface NewPost {
+  id: number;
+  title: string;
+  content: string;
+}
+
+// Helper function to compress/resize image (no changes needed here)
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
     const img = new Image();
-    
     img.onload = () => {
-      // Set max dimensions
       const maxWidth = 1200;
       const maxHeight = 1200;
-      
       let { width, height } = img;
-      
-      // Calculate new dimensions
       if (width > height) {
         if (width > maxWidth) {
           height = (height * maxWidth) / width;
@@ -36,86 +38,61 @@ const compressImage = (file: File): Promise<File> => {
           height = maxHeight;
         }
       }
-      
       canvas.width = width;
       canvas.height = height;
-      
-      // Draw and compress
       ctx.drawImage(img, 0, 0, width, height);
-      
       canvas.toBlob(
         (blob) => {
           if (blob) {
-            const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now(),
-            });
-            resolve(compressedFile);
+            resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
           } else {
             resolve(file);
           }
-        },
-        'image/jpeg',
-        0.8 // 80% quality
+        }, 'image/jpeg', 0.8
       );
     };
-    
     img.src = URL.createObjectURL(file);
   });
 };
 
-const sharePeek = async (post: PostInput, imageFile: File) => {
+const sharePeek = async (post: PostInput, imageFile: File): Promise<NewPost> => {
   try {
-    // First compress the image
     const compressedFile = await compressImage(imageFile);
-    
     const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}-${compressedFile.name}`;
-    
-    console.log('Uploading file:', filePath, 'Size:', compressedFile.size);
-    
+
     const { error: uploadError } = await supabase.storage
       .from("peeks")
-      .upload(filePath, compressedFile, {
-        cacheControl: '3600',
-        upsert: false
-      });
+      .upload(filePath, compressedFile, { cacheControl: '3600', upsert: false });
 
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      throw new Error(`Upload failed: ${uploadError.message}`);
-    }
+    if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
     const { data: publicURLData } = supabase.storage
       .from("peeks")
       .getPublicUrl(filePath);
 
-    console.log('Public URL:', publicURLData.publicUrl);
-
     const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
-      console.error('User error:', userError);
-      throw new Error("User not authenticated");
-    }
+    if (userError || !userData?.user) throw new Error("User not authenticated");
 
     const userEmail = userData.user.email;
-
+    
+    // ✨ CHANGED: Use .select() and .single() to ensure the new post object is returned
     const { data, error } = await supabase
       .from("Peeks")
       .insert({
         ...post,
         image_url: publicURLData.publicUrl,
         user_email: userEmail,
-      });
+        // Assuming your table has a user_id column linked to auth.users
+        user_id: userData.user.id, 
+      })
+      .select('id, title, content') // Select the fields needed for the notification
+      .single();
 
-    if (error) {
-      console.error('Database error:', error);
-      throw new Error(`Database error: ${error.message}`);
-    }
+    if (error) throw new Error(`Database error: ${error.message}`);
     
-    console.log('Success:', data);
     return data;
   } catch (error) {
-    console.error('Full error:', error);
+    console.error('Full error in sharePeek:', error);
     throw error;
   }
 };
@@ -126,20 +103,48 @@ export const SharePeek = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const { user } = useAuth();
+  const queryClient = useQueryClient(); // ✨ NEW: Get queryClient instance
 
   const { mutate, isPending, isError, isSuccess } = useMutation({
-    mutationFn: (data: { post: PostInput; imageFile: File }) => {
+    // ✨ CHANGED: Updated mutation type to expect the NewPost object
+    mutationFn: (data: { post: PostInput; imageFile: File }): Promise<NewPost> => {
       return sharePeek(data.post, data.imageFile);
     },
-    onSuccess: () => {
+    // ✨ CHANGED: onSuccess now receives the new post and triggers the notification
+    onSuccess: (newPost) => {
       // Reset form on success
       setTitle("");
       setContent("");
       setSelectedFile(null);
       setErrorMessage("");
-      // Reset file input
       const fileInput = document.getElementById("image") as HTMLInputElement;
       if (fileInput) fileInput.value = "";
+
+      // Invalidate queries to refetch posts list, etc.
+      queryClient.invalidateQueries({ queryKey: ["posts"] }); // Adjust 'posts' to your query key
+
+      // ✨ TRIGGER THE PUSH NOTIFICATION FOR THE NEW POST ✨
+      if (user && newPost) {
+        try {
+          console.log("Triggering push notification for a new post...");
+          supabase.functions.invoke('trigger-bestie-push', {
+            body: {
+              actionType: 'NEW_POST',
+              actor: {
+                id: user.id,
+                username: user.user_metadata?.user_name || 'Someone',
+              },
+              post: {
+                id: newPost.id,
+                // Use title as preview, fallback to content
+                preview: newPost.title || newPost.content.substring(0, 50) + '...',
+              }
+            }
+          });
+        } catch (pushError) {
+          console.error("Failed to trigger push for new post:", pushError);
+        }
+      }
     },
     onError: (error) => {
       console.error('Mutation error:', error);
@@ -150,9 +155,7 @@ export const SharePeek = () => {
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedFile) return;
-    
-    setErrorMessage(""); // Clear previous errors
-    
+    setErrorMessage("");
     mutate({
       post: { 
         title, 
@@ -166,24 +169,20 @@ export const SharePeek = () => {
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
-      // Check file size (10MB limit)
       if (file.size > 10 * 1024 * 1024) {
         setErrorMessage("File too large. Please choose a smaller image (under 10MB).");
         return;
       }
-      
-      // Check file type
       if (!file.type.startsWith('image/')) {
         setErrorMessage("Please select an image file.");
         return;
       }
-      
       setSelectedFile(file);
-      setErrorMessage(""); // Clear any previous error
+      setErrorMessage("");
     }
   };
 
+  // The entire JSX render part remains the same.
   return (
     <div className="max-w-md mx-auto">
       {/* Header */}
@@ -194,11 +193,10 @@ export const SharePeek = () => {
           <p className="text-gray-600 text-sm">Let your besties know what you're up to</p>
         </div>
       </div>
-
       {/* Form */}
       <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-lg p-6 border border-pink-100">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Title Input */}
+          {/* Form inputs... (no changes here) */}
           <div>
             <label className="block text-pink-600 font-semibold mb-2 text-sm">
               📝 What's happening?
@@ -213,8 +211,6 @@ export const SharePeek = () => {
               className="w-full border-2 border-pink-200 rounded-2xl px-4 py-3 focus:outline-none focus:border-pink-400 focus:ring-4 focus:ring-pink-100 transition-all duration-200 bg-white/80 placeholder-gray-400"
             />
           </div>
-
-          {/* Content Input */}
           <div>
             <label className="block text-pink-600 font-semibold mb-2 text-sm">
               💭 Tell us more (optional)
@@ -228,48 +224,25 @@ export const SharePeek = () => {
               className="w-full border-2 border-pink-200 rounded-2xl px-4 py-3 focus:outline-none focus:border-pink-400 focus:ring-4 focus:ring-pink-100 transition-all duration-200 bg-white/80 placeholder-gray-400 resize-none"
             />
           </div>
-
-          {/* File Input */}
           <div>
             <label className="block text-pink-600 font-semibold mb-2 text-sm">
               📷 Take a Peek
             </label>
             <div className="relative">
-              <input
-                type="file"
-                id="image"
-                accept="image/*"
-                capture="environment"
-                required
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <label
-                htmlFor="image"
-                className="w-full bg-gradient-to-r from-pink-500 to-pink-600 text-white font-semibold px-6 py-4 rounded-2xl cursor-pointer hover:from-pink-600 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border-2 border-pink-400"
-              >
+              <input type="file" id="image" accept="image/*" capture="environment" required onChange={handleFileChange} className="hidden" />
+              <label htmlFor="image" className="w-full bg-gradient-to-r from-pink-500 to-pink-600 text-white font-semibold px-6 py-4 rounded-2xl cursor-pointer hover:from-pink-600 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border-2 border-pink-400">
                 <span className="text-xl">📸</span>
                 {selectedFile ? selectedFile.name : "Choose Photo"}
               </label>
             </div>
             {selectedFile && (
               <div className="mt-2">
-                <p className="text-green-600 text-xs font-medium">
-                  ✅ Photo selected: {selectedFile.name}
-                </p>
-                <p className="text-gray-500 text-xs">
-                  Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                </p>
+                <p className="text-green-600 text-xs font-medium">✅ Photo selected: {selectedFile.name}</p>
+                <p className="text-gray-500 text-xs">Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
               </div>
             )}
           </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={isPending || !selectedFile}
-            className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-bold py-4 rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed text-lg"
-          >
+          <button type="submit" disabled={isPending || !selectedFile} className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-bold py-4 rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed text-lg">
             {isPending ? (
               <span className="flex items-center justify-center gap-2">
                 <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
@@ -282,15 +255,12 @@ export const SharePeek = () => {
               </span>
             )}
           </button>
-
-          {/* Status Messages */}
           {isError && (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
               <p className="text-red-600 font-medium text-sm">😞 Error creating post:</p>
               <p className="text-red-500 text-xs mt-1 break-words">{errorMessage}</p>
             </div>
           )}
-          
           {isSuccess && (
             <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
               <p className="text-green-600 font-medium">🎉 Peek shared successfully!</p>

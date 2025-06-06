@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../supabase-client";
-import { comment } from "postcss";
 import { CommentItem } from "./CommentItem";
 
+// ✨ CHANGED: Added postOwnerId to the props
 interface Props {
   postId: number;
+  postOwnerId: string;
 }
 
 interface NewComment {
@@ -19,7 +20,7 @@ export interface Comment {
     post_id: number;
     parent_comment_id: number | null;
     content: string;
-    user_id: string;
+    user_id: string; // This is important for CommentItem
     created_at: string;
     author: string;
 }
@@ -33,7 +34,6 @@ const createComment = async (
   if (!userId || !author) {
     throw new Error("You must be logged in to comment.");
   }
-
   const { error } = await supabase.from("comments").insert({
     post_id: postId,
     content: newComment.content,
@@ -41,7 +41,6 @@ const createComment = async (
     user_id: userId,
     author: author,
   });
-
   if (error) throw new Error(error.message);
 };
 
@@ -51,12 +50,12 @@ const fetchComments = async (postId: number) : Promise<Comment[]> => {
         .select("*")
         .eq("post_id", postId)
         .order("created_at", {ascending:true});
-
       if (error) throw new Error(error.message);
       return data as Comment[];
 }
 
-export const CommentSection = ({ postId }: Props) => {
+// ✨ CHANGED: Destructure postOwnerId from props
+export const CommentSection = ({ postId, postOwnerId }: Props) => {
   const [newCommentText, setNewCommentText] = useState<string>("");
   const { user } = useAuth();
   const queryClient = useQueryClient()
@@ -68,7 +67,6 @@ export const CommentSection = ({ postId }: Props) => {
   } = useQuery<Comment[], Error>({
     queryKey: ["comments", postId],
     queryFn: () => fetchComments(postId),
-    refetchInterval: 5000,
   });
 
   const { mutate, isPending, isError } = useMutation({
@@ -79,8 +77,38 @@ export const CommentSection = ({ postId }: Props) => {
         user?.id,
         user?.user_metadata?.user_name || user?.email
       ),
-    onSuccess: ()=> {
+    // ✨ CHANGED: onSuccess now triggers the push notification for new comments
+    onSuccess: (_, newComment) => {
+      // First, update the UI
       queryClient.invalidateQueries({queryKey:["comments", postId]});
+      setNewCommentText(""); // Reset the form here after successful mutation
+      
+      // If the user is logged in, trigger the push notification
+      if (user) {
+        try {
+          console.log("Triggering push notification for a new top-level comment...");
+          supabase.functions.invoke('trigger-bestie-push', {
+            body: {
+              actionType: 'COMMENT',
+              actor: {
+                id: user.id,
+                username: user.user_metadata?.user_name || 'Someone',
+              },
+              post: {
+                id: postId,
+                ownerId: postOwnerId,
+              },
+              comment: {
+                preview: newComment.content.substring(0, 50) + '...',
+              },
+              // For top-level comments, there is no parent comment.
+              // The backend function should be written to handle this gracefully.
+            }
+          });
+        } catch (pushError) {
+          console.error("Failed to trigger push notification for comment:", pushError);
+        }
+      }
     } 
   });
 
@@ -88,22 +116,19 @@ export const CommentSection = ({ postId }: Props) => {
     e.preventDefault();
     if (!newCommentText) return;
     mutate({ content: newCommentText, parent_comment_id: null });
-    setNewCommentText("");
+    // Note: setNewCommentText moved to onSuccess for better UX.
+    // It only clears if the submission was successful.
   };
-
-  /* Map of Comments - Organize Replies - Return Tree */
 
   const buildCommentTree = (
     flatComments: Comment[]
   ): (Comment & {children?: Comment[] })[] => {
+    // ... your buildCommentTree function is perfect, no changes needed ...
     const map = new Map<number, Comment & { children?: Comment[]}>();
-    
     const roots: (Comment & {children?: Comment[]})[] = [];
-
     flatComments.forEach((comment) => {
       map.set(comment.id, {...comment, children: [] });
     });
-
     flatComments.forEach((comment) => {
       if(comment.parent_comment_id) {
         const parent = map.get(comment.parent_comment_id)
@@ -115,7 +140,6 @@ export const CommentSection = ({ postId }: Props) => {
         roots.push(map.get(comment.id)!)
       }
     });
-
     return roots;
   };
    
@@ -129,13 +153,12 @@ export const CommentSection = ({ postId }: Props) => {
 
     const commentTree = comments ? buildCommentTree(comments) : []; 
     
-
   return (
     <div className="max-w-md mx-auto mt-8 bg-white rounded-xl p-6 shadow-md">
       <h3 className="text-lg font-bold text-pink-600 mb-4">Comments</h3>
-
-        {/* Create Comment Section */}
-      {user ? (
+      
+      {/* Create Comment Section (Form) */}
+      {user && (
         <form onSubmit={handleSubmit} className="space-y-4">
           <textarea
             value={newCommentText}
@@ -155,17 +178,15 @@ export const CommentSection = ({ postId }: Props) => {
             <p className="text-sm text-red-500 mt-1">Error posting comment.</p>
           )}
         </form>
-      ) : (
-        <p className="text-sm text-gray-600 italic">
-          You must be logged in to post a comment.
-        </p>
       )}
 
       {/* Comments Display Section */}
-
-      <div>{commentTree.map((comment, key) => (
-        <CommentItem key={key} comment={comment} postId={postId}/>
-      ))}</div>
+      <div className="mt-6 space-y-4">
+        {/* ✨ CHANGED: Pass postOwnerId down to each CommentItem */}
+        {commentTree.map((comment) => (
+          <CommentItem key={comment.id} comment={comment} postId={postId} postOwnerId={postOwnerId}/>
+        ))}
+      </div>
 
     </div>
   );

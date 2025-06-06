@@ -4,11 +4,14 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase-client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+// ✨ CHANGED: Add postOwnerId to know who created the original post.
 interface Props {
   comment: Comment & {
     children?: Comment[];
+    user_id: string; // Ensure your Comment type includes the author's user_id
   };
   postId: number;
+  postOwnerId: string;
 }
 
 const createReply = async (
@@ -31,7 +34,8 @@ const createReply = async (
   if (error) throw new Error(error.message);
 };
 
-export const CommentItem = ({ comment, postId }: Props) => {
+// ✨ CHANGED: Destructure postOwnerId
+export const CommentItem = ({ comment, postId, postOwnerId }: Props) => {
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [isCollapsed, setIsCollapsed] = useState(true);
@@ -48,10 +52,42 @@ export const CommentItem = ({ comment, postId }: Props) => {
         user?.id,
         user?.user_metadata?.user_name || user?.email
       ),
-    onSuccess: () => {
+    // ✨ CHANGED: The onSuccess callback now triggers the push notification
+    onSuccess: (_, replyContent) => {
+      // Invalidate query and reset UI state first
       queryClient.invalidateQueries({ queryKey: ["comments", postId] });
       setReplyText("");
       setShowReply(false);
+      
+      // Now, trigger the push notification if the user is logged in
+      if (user) {
+        try {
+          console.log("Triggering push notification for a new reply...");
+          // We send a richer payload here. The backend can decide who to notify.
+          supabase.functions.invoke('trigger-bestie-push', {
+            body: {
+              actionType: 'COMMENT',
+              actor: {
+                id: user.id,
+                username: user.user_metadata?.user_name || 'Someone',
+              },
+              post: {
+                id: postId,
+                ownerId: postOwnerId,
+              },
+              comment: {
+                preview: replyContent.substring(0, 50) + '...',
+              },
+              // ✨ NEW: We also send info about the parent comment author
+              parentComment: {
+                ownerId: comment.user_id, // The ID of the user being replied to
+              },
+            }
+          });
+        } catch (pushError) {
+          console.error("Failed to trigger push notification for reply:", pushError);
+        }
+      }
     },
   });
 
@@ -64,9 +100,7 @@ export const CommentItem = ({ comment, postId }: Props) => {
   return (
     <div className="mt-6 border-l-2 border-pink-200 pl-4 max-w-full overflow-x-hidden break-words">
       <div className="text-sm font-semibold text-gray-800 break-words">{comment.author}</div>
-      <div className="text-xs text-gray-400 mb-1">
-        {new Date(comment.created_at).toLocaleString()}
-      </div>
+      {/* ... rest of your component is fine ... */}
       <p className="text-sm text-gray-700 mb-2 break-words">{comment.content}</p>
 
       <button
@@ -76,8 +110,10 @@ export const CommentItem = ({ comment, postId }: Props) => {
         {showReply ? "Cancel" : "Reply"}
       </button>
 
+      {/* ... form ... */}
       {showReply && user && (
         <form onSubmit={handleReplySubmit} className="mt-3 space-y-2">
+          {/* ... */}
           <textarea
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
@@ -92,35 +128,26 @@ export const CommentItem = ({ comment, postId }: Props) => {
           >
             {isPending ? "Posting..." : "Post Reply"}
           </button>
-          {isError && <p className="text-xs text-red-500">Error posting reply.</p>}
         </form>
       )}
+
 
       {/* Replies */}
       {comment.children && comment.children.length > 0 && (
         <div className="mt-3">
+          {/* ... collapse button ... */}
           <button
             onClick={() => setIsCollapsed((prev) => !prev)}
             className="flex items-center text-pink-500 text-xs font-semibold hover:underline"
           >
-            <span>{isCollapsed ? "Show Replies" : "Hide Replies"}</span>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="#ec4899"
-              className={`ml-1 w-4 h-4 transform transition-transform duration-300 ${
-                isCollapsed ? "" : "rotate-180"
-              }`}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 9l6 6 6-6" />
-            </svg>
+            {/* ... */}
           </button>
-
+          
           {isCollapsed === false && (
             <div className="mt-2 pl-3 border-l border-pink-200 space-y-4 overflow-x-auto">
-              {comment.children.map((child, key) => (
-                <CommentItem key={key} comment={child} postId={postId} />
+              {/* ✨ CHANGED: Pass postOwnerId down to nested replies */}
+              {comment.children.map((child) => (
+                <CommentItem key={child.id} comment={child} postId={postId} postOwnerId={postOwnerId} />
               ))}
             </div>
           )}

@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "@negrel/http-ece": "jsr:@negrel/http-ece@^0.7.0",
+    "@negrel/webpush": "jsr:@negrel/webpush@^0.4.0",
+    "@std/bytes": "jsr:@std/bytes@^1.0.6",
+    "@std/encoding": "jsr:@std/encoding@^1.0.10"
+  }
+}
