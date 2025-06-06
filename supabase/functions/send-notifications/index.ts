@@ -2,7 +2,7 @@
 // @ts-nocheck (Edge runtime)
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
-import {dotenv} from "dotenv";
+import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -12,8 +12,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL || Deno.env.get('SUPABASE_URL');
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   console.error('⛔ SUPABASE_URL / SERVICE_ROLE_KEY missing')
