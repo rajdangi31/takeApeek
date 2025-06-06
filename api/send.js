@@ -5,13 +5,11 @@
 // if ENV vars are missing in Preview builds.
 
 import webpush from 'web-push'
-import dotenv from 'dotenv'
 
 // Load .env (local) or Vercel env vars (production / preview)
-dotenv.config()
 
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+const VAPID_PUBLIC_KEY =Deno.env.get('VAPID_PUBLIC_KEY');
+const VAPID_PRIVATE_KEY =Deno.env.get('VAPID_PRIVATE_KEY');
 
 
 if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
