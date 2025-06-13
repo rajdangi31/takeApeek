@@ -1,5 +1,5 @@
+// Home.tsx
 import { PostList } from "../components/PostList";
-import { NotificationSettings } from "../components/NotificationSettings";
 
 export const Home = () => {
   return (
@@ -17,11 +17,6 @@ export const Home = () => {
             See what your friends are up to right now
           </p>
         </div>
-      </div>
-
-      {/* Notifications */}
-      <div className="max-w-md mx-auto px-4">
-        <NotificationSettings />
       </div>
 
       {/* Posts Feed */}
