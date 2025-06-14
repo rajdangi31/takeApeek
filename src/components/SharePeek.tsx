@@ -112,23 +112,29 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
 
   // 5. Fire a push for each bestie ────────────────────────────────────────────
   if (besties?.length) {
-    /*await Promise.all(
-      besties.map(async ({ bestie_id }) => {
-        await fetch(
-          'https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: bestie_id,                 // recipient
-              title:   'TakeAPeek',
-              body:    'Your bestie shared a new peek!',
-              url:     peekUrl,
-            }),
-          }
-        )
-      })
-    ) */
+    await Promise.all(
+  besties.map(async ({ bestie_id }: { bestie_id: string }) => {
+    try {
+      const res = await fetch(
+        'https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: bestie_id,
+            title:   'TakeAPeek',
+            body:    'Your bestie shared a new peek!',
+            url:     peekUrl,
+          }),
+        }
+      )
+      console.log('Push response:', res.status, await res.text())
+    } catch (e) {
+      console.error('Push error for bestie_id', bestie_id, e)
+    }
+  })
+)
+ 
   }
 
   return insertData
