@@ -111,8 +111,11 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
   if (bestiesError) console.error('Besties query error:', bestiesError)
 
   // 5. Fire a push for each bestie ────────────────────────────────────────────
+  
+  console.log("🧠 Besties for push:", besties);
   if (besties?.length) {
     await Promise.all(
+      
   besties.map(async ({ bestie_id }: { bestie_id: string }) => {
     try {
       const res = await fetch(
