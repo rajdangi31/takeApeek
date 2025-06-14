@@ -112,7 +112,7 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
 
   // 5. Fire a push for each bestie ────────────────────────────────────────────
   if (besties?.length) {
-    await Promise.all(
+    /*await Promise.all(
       besties.map(async ({ bestie_id }) => {
         await fetch(
           'https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push',
@@ -128,7 +128,7 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
           }
         )
       })
-    )
+    ) */
   }
 
   return insertData
