@@ -64,61 +64,76 @@ const compressImage = (file: File): Promise<File> => {
   });
 };
 
+// ─── sharePeek.ts  (helper inside your SharePeek component) ────────────────────
 const sharePeek = async (post: PostInput, imageFile: File) => {
-  try {
-    // First compress the image
-    const compressedFile = await compressImage(imageFile);
-    
-    const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}-${compressedFile.name}`;
-    
-    console.log('Uploading file:', filePath, 'Size:', compressedFile.size);
-    
-    const { error: uploadError } = await supabase.storage
-      .from("peeks")
-      .upload(filePath, compressedFile, {
-        cacheControl: '3600',
-        upsert: false
-      });
+  // 1. Compress + upload image ────────────────────────────────────────────────
+  const compressedFile = await compressImage(imageFile)
+  const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}-${compressedFile.name}`
 
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      throw new Error(`Upload failed: ${uploadError.message}`);
-    }
+  const { error: uploadError } = await supabase.storage
+    .from('peeks')
+    .upload(filePath, compressedFile, { cacheControl: '3600', upsert: false })
 
-    const { data: publicURLData } = supabase.storage
-      .from("peeks")
-      .getPublicUrl(filePath);
+  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
 
-    console.log('Public URL:', publicURLData.publicUrl);
+  const { data: publicURLData } = supabase.storage.from('peeks').getPublicUrl(filePath)
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user) {
-      console.error('User error:', userError);
-      throw new Error("User not authenticated");
-    }
+  // 2. Get current user info ──────────────────────────────────────────────────
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData?.user) throw new Error('User not authenticated')
 
-    const userEmail = userData.user.email;
+  const user     = userData.user
+  const userId   = user.id                                   // UUID
+  const userEmail = user.email ?? ''
 
-    const { data, error } = await supabase
-      .from("Peeks")
-      .insert({
-        ...post,
-        image_url: publicURLData.publicUrl,
-        user_email: userEmail,
-      });
+  // 3. Insert Peek row ────────────────────────────────────────────────────────
+  const { data: insertData, error: dbError } = await supabase
+    .from('Peeks')
+    .insert({
+      ...post,
+      image_url: publicURLData.publicUrl,
+      user_email: userEmail,
+    })
+    .select()                                // return inserted rows
 
-    if (error) {
-      console.error('Database error:', error);
-      throw new Error(`Database error: ${error.message}`);
-    }
-    
-    console.log('Success:', data);
-    return data;
-  } catch (error) {
-    console.error('Full error:', error);
-    throw error;
+  if (dbError) throw new Error(`Database error: ${dbError.message}`)
+
+  const peekId = insertData?.[0]?.id        // primary-key of new Peek
+  const peekUrl = `/post/${peekId}`
+
+  // 4. Fetch besties (accepted) ───────────────────────────────────────────────
+  const { data: besties, error: bestiesError } = await supabase
+    .from('besties')
+    .select('bestie_id')
+    .eq('user_id', userId)
+    .eq('status', 'accepted')
+
+  if (bestiesError) console.error('Besties query error:', bestiesError)
+
+  // 5. Fire a push for each bestie ────────────────────────────────────────────
+  if (besties?.length) {
+    await Promise.all(
+      besties.map(async ({ bestie_id }) => {
+        await fetch(
+          'https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: bestie_id,                 // recipient
+              title:   'TakeAPeek',
+              body:    'Your bestie shared a new peek!',
+              url:     peekUrl,
+            }),
+          }
+        )
+      })
+    )
   }
-};
+
+  return insertData
+}
+
 
 export const SharePeek = () => {
   const [title, setTitle] = useState<string>("");
