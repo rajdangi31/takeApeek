@@ -115,31 +115,36 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
   // 5. Fire a push for each bestie ────────────────────────────────────────────
   
   console.log("🧠 Besties for push:", besties);
-  alert("🔔 Entered besties push block.");
   if (besties?.length) {
-    await Promise.all(
-      
+    const { data: sessionData } = await supabase.auth.getSession();
+const accessToken = sessionData?.session?.access_token;
+
+await Promise.all(
   besties.map(async ({ bestie_id }: { bestie_id: string }) => {
     try {
       const res = await fetch(
         'https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}` // ✅ THIS FIXES IT
+          },
           body: JSON.stringify({
             user_id: bestie_id,
-            title:   'TakeAPeek',
-            body:    'Your bestie shared a new peek!',
-            url:     peekUrl,
+            title: 'TakeAPeek',
+            body: 'Your bestie shared a new peek!',
+            url: peekUrl,
           }),
         }
-      )
-      console.log('Push response:', res.status, await res.text())
+      );
+      console.log('Push response:', res.status, await res.text());
     } catch (e) {
-      console.error('Push error for bestie_id', bestie_id, e)
+      console.error('Push error for bestie_id', bestie_id, e);
     }
   })
-)
+);
+
  
   }
 
