@@ -102,6 +102,8 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
   const peekUrl = `/post/${peekId}`
 
   // 4. Fetch besties (accepted) ───────────────────────────────────────────────
+  
+  console.log("👤 User ID:", userId);
   const { data: besties, error: bestiesError } = await supabase
     .from('besties')
     .select('bestie_id')
@@ -113,6 +115,7 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
   // 5. Fire a push for each bestie ────────────────────────────────────────────
   
   console.log("🧠 Besties for push:", besties);
+  alert("🔔 Entered besties push block.");
   if (besties?.length) {
     await Promise.all(
       
