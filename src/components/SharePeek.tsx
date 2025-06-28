@@ -120,30 +120,22 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
 const accessToken = sessionData?.session?.access_token;
 
 await Promise.all(
-  besties.map(async ({ bestie_id }: { bestie_id: string }) => {
-    try {
-      const res = await fetch(
-        'https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}` // ✅ THIS FIXES IT
-          },
-          body: JSON.stringify({
-            user_id: bestie_id,
-            title: 'TakeAPeek',
-            body: 'Your bestie shared a new peek!',
-            url: peekUrl,
-          }),
-        }
-      );
-      console.log('Push response:', res.status, await res.text());
-    } catch (e) {
-      console.error('Push error for bestie_id', bestie_id, e);
-    }
-  })
-);
+  besties.map((b) =>
+    fetch('https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        user_id: b.bestie_id,
+        title: "Raj sent you a peek!",
+        body: "Tap to view it",
+        url: `/post/${peekId}`,
+      }),
+    })
+  )
+)
 
  
   }
