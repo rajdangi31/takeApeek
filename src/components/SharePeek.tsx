@@ -66,27 +66,30 @@ const compressImage = (file: File): Promise<File> => {
 
 // ─── sharePeek.ts  (helper inside your SharePeek component) ────────────────────
 const sharePeek = async (post: PostInput, imageFile: File) => {
-  // 1. Compress + upload image ────────────────────────────────────────────────
-  const compressedFile = await compressImage(imageFile)
-  const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}-${compressedFile.name}`
+  // 1. Compress + upload image
+  const compressedFile = await compressImage(imageFile);
+  const filePath = `${post.title.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}-${compressedFile.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from('peeks')
-    .upload(filePath, compressedFile, { cacheControl: '3600', upsert: false })
+    .upload(filePath, compressedFile, {
+      cacheControl: '3600',
+      upsert: false,
+    });
 
-  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
+  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
-  const { data: publicURLData } = supabase.storage.from('peeks').getPublicUrl(filePath)
+  const { data: publicURLData } = supabase.storage.from('peeks').getPublicUrl(filePath);
 
-  // 2. Get current user info ──────────────────────────────────────────────────
-  const { data: userData, error: userError } = await supabase.auth.getUser()
-  if (userError || !userData?.user) throw new Error('User not authenticated')
+  // 2. Get current user info
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) throw new Error('User not authenticated');
 
-  const user     = userData.user
-  const userId   = user.id                                   // UUID
-  const userEmail = user.email ?? ''
+  const user = userData.user;
+  const userId = user.id;
+  const userEmail = user.email ?? '';
 
-  // 3. Insert Peek row ────────────────────────────────────────────────────────
+  // 3. Insert Peek row
   const { data: insertData, error: dbError } = await supabase
     .from('Peeks')
     .insert({
@@ -94,54 +97,70 @@ const sharePeek = async (post: PostInput, imageFile: File) => {
       image_url: publicURLData.publicUrl,
       user_email: userEmail,
     })
-    .select()                                // return inserted rows
+    .select();
 
-  if (dbError) throw new Error(`Database error: ${dbError.message}`)
+  if (dbError) throw new Error(`Database error: ${dbError.message}`);
 
-  const peekId = insertData?.[0]?.id        // primary-key of new Peek
-  const peekUrl = `/post/${peekId}`
+  const peekId = insertData?.[0]?.id;
+  if (!peekId) throw new Error("Failed to retrieve peek ID after insert.");
 
-  // 4. Fetch besties (accepted) ───────────────────────────────────────────────
-  
-  console.log("👤 User ID:", userId);
+  const peekUrl = `/post/${peekId}`;
+
+  // 4. Fetch besties
   const { data: besties, error: bestiesError } = await supabase
     .from('besties')
     .select('bestie_id')
     .eq('user_id', userId)
-    .eq('status', 'accepted')
+    .eq('status', 'accepted');
 
-  if (bestiesError) console.error('Besties query error:', bestiesError)
-
-  // 5. Fire a push for each bestie ────────────────────────────────────────────
-  
-  console.log("🧠 Besties for push:", besties);
-  if (besties?.length) {
-    const { data: sessionData } = await supabase.auth.getSession();
-const accessToken = sessionData?.session?.access_token;
-
-await Promise.all(
-  besties.map((b) =>
-    fetch('https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        user_id: b.bestie_id,
-        title: "Raj sent you a peek!",
-        body: "Tap to view it",
-        url: `/post/${peekId}`,
-      }),
-    })
-  )
-)
-
- 
+  if (bestiesError) {
+    console.error('Besties query error:', bestiesError);
+    return insertData; // Don't fail entire process just because of bestie lookup
   }
 
-  return insertData
-}
+  // 5. Fire push for each bestie
+  if (besties?.length) {
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData?.session?.access_token) {
+      console.warn("🔐 No access token found. Skipping push.");
+      return insertData;
+    }
+
+    const accessToken = sessionData.session.access_token;
+
+    await Promise.all(
+      besties.map(async (b) => {
+        try {
+          const res = await fetch('https://ijyicqsfverbgsxbtarm.supabase.co/functions/v1/send-push', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              user_id: b.bestie_id,
+              title: "Raj sent you a peek!",
+              body: "Tap to view it",
+              url: peekUrl,
+            }),
+          });
+
+          const result = await res.json();
+          if (!res.ok) {
+            console.error(`❌ Push failed for ${b.bestie_id}:`, result.error || result);
+          } else {
+            console.log(`✅ Push sent to ${b.bestie_id}`, result);
+          }
+        } catch (err) {
+          console.error(`🔥 Push error for ${b.bestie_id}:`, err);
+        }
+      })
+    );
+  }
+
+  return insertData;
+};
+
 
 
 export const SharePeek = () => {
