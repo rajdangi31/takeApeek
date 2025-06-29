@@ -17,7 +17,6 @@ export const Home = () => {
     // Check current permission status
     if (Notification.permission === 'granted') {
       setNotificationStatus('granted')
-      alert('Notifications have been granted!')
       return
     }
 
