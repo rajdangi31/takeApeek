@@ -1,9 +1,57 @@
 // Home.tsx
+import { useState } from "react"
 import usePush from "../hooks/usePush"
 import { PostList } from "../components/PostList"
 
 export const Home = () => {
   const { requestPushPermission } = usePush()
+  const [isRequesting, setIsRequesting] = useState(false)
+  const [notificationStatus, setNotificationStatus] = useState<'default' | 'granted' | 'denied'>('default')
+
+  const handlePushPermission = async () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support notifications')
+      return
+    }
+
+    // Check current permission status
+    if (Notification.permission === 'granted') {
+      setNotificationStatus('granted')
+      return
+    }
+
+    if (Notification.permission === 'denied') {
+      setNotificationStatus('denied')
+      alert('Notifications are blocked. Please enable them in your browser settings.')
+      return
+    }
+
+    setIsRequesting(true)
+    try {
+      await requestPushPermission()
+      // Check the permission after request
+      setNotificationStatus(Notification.permission as 'granted' | 'denied')
+    } catch (error) {
+      console.error('Error requesting push permission:', error)
+    } finally {
+      setIsRequesting(false)
+    }
+  }
+
+  const getButtonText = () => {
+    if (isRequesting) return '🔄 Requesting...'
+    if (notificationStatus === 'granted') return '✅ Notifications Enabled'
+    if (notificationStatus === 'denied') return '❌ Notifications Blocked'
+    return '🔔 Enable Notifications'
+  }
+
+  const getButtonStyle = () => {
+    if (notificationStatus === 'granted') 
+      return "bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-xl"
+    if (notificationStatus === 'denied') 
+      return "bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-xl"
+    return "bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded-xl"
+  }
 
   return (
     <div className="space-y-8">
@@ -19,14 +67,14 @@ export const Home = () => {
             See what your friends are up to right now
           </p>
           <button
-            onClick={requestPushPermission}
-            className="bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded-xl"
+            onClick={handlePushPermission}
+            disabled={isRequesting || notificationStatus === 'granted'}
+            className={getButtonStyle()}
           >
-            🔔 Enable Notifications
+            {getButtonText()}
           </button>
         </div>
       </div>
-
       <div className="space-y-6">
         <PostList />
       </div>
