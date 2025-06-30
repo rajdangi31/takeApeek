@@ -1,7 +1,9 @@
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../supabase-client'
 
-const PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
+const PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+// @ts-ignore – debug: expose key for console check
+if (import.meta.env.PROD) window.__PUBLIC_VAPID = PUBLIC_KEY;
 
 export default function usePush() {
   const { user } = useAuth()
