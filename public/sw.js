@@ -1,18 +1,28 @@
-// public/sw.js  –– *keep this file tiny and framework-agnostic*
-
-self.addEventListener('push', event => {
-  const { title, body, url } = event.data.json()
+self.addEventListener('push', function(event) {
+  const data = event.data.json();
+  const { title, body, url } = data;
 
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: '/Logo.png',     // change if you keep your icons elsewhere
+      icon: '/icon-192.png',
       data: { url }
     })
-  )
-})
+  );
+});
 
-self.addEventListener('notificationclick', event => {
-  event.notification.close()
-  event.waitUntil(clients.openWindow(event.notification.data.url))
-})
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then(clientList => {
+      for (const client of clientList) {
+        if (client.url === event.notification.data.url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(event.notification.data.url);
+      }
+    })
+  );
+});
