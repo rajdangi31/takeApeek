@@ -5,18 +5,18 @@ import { createClient } from '@supabase/supabase-js';
 
 export default function usePush() {
   const { user } = useAuth();
-  const [initialized, setInitialized] = useState(false); // Prevent multiple inits
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     const initAndSubscribe = async () => {
       console.log('Starting initAndSubscribe...');
       if (!user || !('Notification' in window) || !('serviceWorker' in navigator)) {
-        console.log('Skipping: No user or browser support for notifications.');
+        console.log('Skipping: No user or browser support.');
         return;
       }
 
       if (initialized) {
-        console.log('OneSignal already initialized - skipping.');
+        console.log('Already initialized - skipping.');
         return;
       }
 
@@ -46,50 +46,29 @@ export default function usePush() {
           },
         });
         console.log('OneSignal initialized');
-        setInitialized(true); // Set flag
+        setInitialized(true);
 
         const permission = await Notification.requestPermission();
-        console.log('Notification Permission:', permission);
-        if (permission !== 'granted') {
-          console.log('Notification permission was not granted.');
-          return;
-        }
+        console.log('Permission:', permission);
+        if (permission !== 'granted') return;
 
-        // @ts-ignore - Suppress type error (method exists in SDK)
-        await OneSignal.showSlidedownPrompt();
+        await OneSignal.Slidedown.promptPush(); // Correct method from SDK docs
 
-        // @ts-ignore - Suppress type error (method exists in SDK)
-        const isSubscribed = await OneSignal.isPushNotificationsEnabled();
-        console.log('Is Subscribed to OneSignal:', isSubscribed);
-        if (!isSubscribed) {
-          console.log('User is not subscribed to OneSignal push notifications.');
-          return;
-        }
+        const isSubscribed = OneSignal.User.PushSubscription.optedIn;
+        console.log('Subscribed:', isSubscribed);
+        if (!isSubscribed) return;
 
-        // @ts-ignore - Suppress type error (method exists in SDK)
-        const playerId = await OneSignal.getUserId();
-        console.log('OneSignal Player ID:', playerId);
-        if (!playerId) {
-          console.log('Could not retrieve OneSignal Player ID.');
-          return;
-        }
+        const playerId = OneSignal.User.onesignalId;
+        console.log('Player ID:', playerId);
+        if (!playerId) return;
 
-        const supabase = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_ANON_KEY
-        );
+        const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
         const { data: sessionData } = await supabase.auth.getSession();
         const accessToken = sessionData?.session?.access_token;
         console.log('Access Token:', accessToken ? 'Present' : 'Missing');
-        if (!accessToken) {
-          console.error('No Supabase access token found.');
-          return;
-        }
+        if (!accessToken) return;
 
-        const supabaseAuth = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          accessToken
-        ); // Use token client for RLS
+        const supabaseAuth = createClient(import.meta.env.VITE_SUPABASE_URL, accessToken); // Token client for RLS
 
         const { error } = await supabaseAuth
           .from('user_profiles')
@@ -97,12 +76,12 @@ export default function usePush() {
           .eq('id', user.id);
 
         if (error) {
-          console.error('Failed to save OneSignal player ID to Supabase:', error.message, error.details, error.hint); // Enhanced error logging
+          console.error('Save error:', error.message, error.details, error.hint); // Enhanced logging
         } else {
-          console.log('🔔 OneSignal player ID saved to Supabase successfully!');
+          console.log('🔔 Saved!');
         }
       } catch (err) {
-        console.error('An error occurred during OneSignal initialization or subscription:', err);
+        console.error('Init error:', err);
       }
     };
 
@@ -111,12 +90,9 @@ export default function usePush() {
 
   return {
     requestPushPermission: async () => {
-      if ('Notification' in window) {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-          // @ts-ignore - Suppress type error (method exists in SDK)
-          await OneSignal.showSlidedownPrompt();
-        }
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        await OneSignal.Slidedown.promptPush();
       }
     },
   };
