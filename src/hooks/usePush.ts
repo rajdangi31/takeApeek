@@ -1,16 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import OneSignal from 'react-onesignal';
 import { useAuth } from '../contexts/AuthContext';
 import { createClient } from '@supabase/supabase-js';
 
 export default function usePush() {
   const { user } = useAuth();
+  const [initialized, setInitialized] = useState(false); // Added: Flag to prevent multiple inits
 
   useEffect(() => {
     const initAndSubscribe = async () => {
       console.log('Starting initAndSubscribe...'); // Debug start
       if (!user || !('Notification' in window) || !('serviceWorker' in navigator)) {
         console.log('Skipping: No user or browser support for notifications.');
+        return;
+      }
+
+      if (initialized) {
+        console.log('OneSignal already initialized - skipping init.');
         return;
       }
 
@@ -40,6 +46,7 @@ export default function usePush() {
           },
         });
         console.log('OneSignal initialized');
+        setInitialized(true); // Set flag after successful init
 
         const permission = await Notification.requestPermission();
         console.log('Notification Permission:', permission);
@@ -98,7 +105,7 @@ export default function usePush() {
     };
 
     initAndSubscribe();
-  }, [user]);
+  }, [user, initialized]); // Added initialized to dependency to prevent re-init on re-renders
 
   return {
     // Optional manual trigger
