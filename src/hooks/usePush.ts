@@ -5,18 +5,18 @@ import { createClient } from '@supabase/supabase-js';
 
 export default function usePush() {
   const { user } = useAuth();
-  const [initialized, setInitialized] = useState(false); // Added: Flag to prevent multiple inits
+  const [initialized, setInitialized] = useState(false); // Prevent multiple inits
 
   useEffect(() => {
     const initAndSubscribe = async () => {
-      console.log('Starting initAndSubscribe...'); // Debug start
+      console.log('Starting initAndSubscribe...');
       if (!user || !('Notification' in window) || !('serviceWorker' in navigator)) {
         console.log('Skipping: No user or browser support for notifications.');
         return;
       }
 
       if (initialized) {
-        console.log('OneSignal already initialized - skipping init.');
+        console.log('OneSignal already initialized - skipping.');
         return;
       }
 
@@ -46,7 +46,7 @@ export default function usePush() {
           },
         });
         console.log('OneSignal initialized');
-        setInitialized(true); // Set flag after successful init
+        setInitialized(true); // Set flag
 
         const permission = await Notification.requestPermission();
         console.log('Notification Permission:', permission);
@@ -55,10 +55,10 @@ export default function usePush() {
           return;
         }
 
-        // @ts-ignore - Suppress type error as the method exists in the SDK but not in types
+        // @ts-ignore - Suppress type error (method exists in SDK)
         await OneSignal.showSlidedownPrompt();
 
-        // @ts-ignore - Suppress type error as the method exists in the SDK but not in types
+        // @ts-ignore - Suppress type error (method exists in SDK)
         const isSubscribed = await OneSignal.isPushNotificationsEnabled();
         console.log('Is Subscribed to OneSignal:', isSubscribed);
         if (!isSubscribed) {
@@ -66,7 +66,7 @@ export default function usePush() {
           return;
         }
 
-        // @ts-ignore - Suppress type error as the method exists in the SDK but not in types
+        // @ts-ignore - Suppress type error (method exists in SDK)
         const playerId = await OneSignal.getUserId();
         console.log('OneSignal Player ID:', playerId);
         if (!playerId) {
@@ -78,24 +78,26 @@ export default function usePush() {
           import.meta.env.VITE_SUPABASE_URL,
           import.meta.env.VITE_SUPABASE_ANON_KEY
         );
-        const { data: { session } } = await supabase.auth.getSession();
-        const accessToken = session?.access_token;
-        console.log('Supabase Access Token:', accessToken ? 'Present' : 'Missing');
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        console.log('Access Token:', accessToken ? 'Present' : 'Missing');
         if (!accessToken) {
-          console.error('No Supabase access token found. User might not be properly authenticated.');
+          console.error('No Supabase access token found.');
           return;
         }
 
-        // It is not recommended to create a new client with the access token directly.
-        // The existing supabase client instance from `supabase-client.ts` will manage the auth token.
-        // We will use the originally imported supabase client for the update.
-        // The RLS policy will use the JWT from the request.
-        const { error } = await supabase
+        const supabaseAuth = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          accessToken
+        ); // Use token client for RLS
+
+        const { error } = await supabaseAuth
           .from('user_profiles')
           .update({ onesignal_id: playerId })
           .eq('id', user.id);
+
         if (error) {
-          console.error('Failed to save OneSignal player ID to Supabase:', error.message, error.details);
+          console.error('Failed to save OneSignal player ID to Supabase:', error.message, error.details, error.hint); // Enhanced error logging
         } else {
           console.log('🔔 OneSignal player ID saved to Supabase successfully!');
         }
@@ -105,15 +107,14 @@ export default function usePush() {
     };
 
     initAndSubscribe();
-  }, [user, initialized]); // Added initialized to dependency to prevent re-init on re-renders
+  }, [user, initialized]);
 
   return {
-    // Optional manual trigger
     requestPushPermission: async () => {
       if ('Notification' in window) {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-          // @ts-ignore - Suppress type error as the method exists in the SDK but not in types
+          // @ts-ignore - Suppress type error (method exists in SDK)
           await OneSignal.showSlidedownPrompt();
         }
       }
