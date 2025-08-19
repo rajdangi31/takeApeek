@@ -49,6 +49,10 @@ export default function usePush() {
         }
 
         await OneSignal.Slidedown.promptPush();
+        
+        //@ts-ignore
+        const subscriptionState = await OneSignal.getSubscription();
+        console.log('Subscription State:', subscriptionState);
 
         const isSubscribed = await OneSignal.User.PushSubscription.optedIn;
         console.log('Is Subscribed to OneSignal:', isSubscribed);
