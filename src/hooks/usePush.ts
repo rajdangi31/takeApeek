@@ -5,18 +5,20 @@ import { createClient } from '@supabase/supabase-js';
 
 export default function usePush() {
   const { user } = useAuth();
-  const [initialized, setInitialized] = useState(false); // Flag to prevent multiple inits
+  const [initialized, setInitialized] = useState(false); // Prevent multiple inits
 
   useEffect(() => {
+    if (!user) return;
+
     const initAndSubscribe = async () => {
       console.log('Starting initAndSubscribe...');
-      if (!user || !('Notification' in window) || !('serviceWorker' in navigator)) {
-        console.log('Skipping: No user or browser support.');
+      if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+        console.log('Skipping: No browser support.');
         return;
       }
 
       if (initialized) {
-        console.log('Already initialized - skipping init.');
+        console.log('Already initialized - skipping.');
         return;
       }
 
@@ -46,47 +48,32 @@ export default function usePush() {
           },
         });
         console.log('OneSignal initialized');
-        setInitialized(true); // Set flag after init
+        setInitialized(true); // Set flag
 
         const permission = await Notification.requestPermission();
-        console.log('Notification Permission:', permission);
-        if (permission !== 'granted') {
-          console.log('Permission not granted.');
-          return;
-        }
+        console.log('Permission:', permission);
+        if (permission !== 'granted') return;
 
-        await OneSignal.Slidedown.promptPush();
+        // @ts-ignore
+        await OneSignal.showSlidedownPrompt(); // Correct method, suppress type error
 
-        const isSubscribed = await OneSignal.User.PushSubscription.optedIn;
-        console.log('Is Subscribed to OneSignal:', isSubscribed);
-        if (!isSubscribed) {
-          console.log('Not subscribed.');
-          return;
-        }
+        // @ts-ignore
+        const isSubscribed = await OneSignal.isPushNotificationsEnabled();
+        console.log('Subscribed:', isSubscribed);
+        if (!isSubscribed) return;
 
-        const playerId = OneSignal.User.onesignalId;
-        console.log('OneSignal Player ID:', playerId);
-        if (!playerId) {
-          console.log('No Player ID.');
-          return;
-        }
+        // @ts-ignore
+        const playerId = await OneSignal.getUserId();
+        console.log('Player ID:', playerId);
+        if (!playerId) return;
 
-        const supabase = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_ANON_KEY
-        );
-        const { data: { session } } = await supabase.auth.getSession();
-        const accessToken = session?.access_token;
-        console.log('Supabase Access Token:', accessToken ? 'Present' : 'Missing');
-        if (!accessToken) {
-          console.error('No access token.');
-          return;
-        }
+        const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        console.log('Access Token:', accessToken ? 'Present' : 'Missing');
+        if (!accessToken) return;
 
-        const supabaseAuth = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          accessToken
-        ); // Token client for RLS
+        const supabaseAuth = createClient(import.meta.env.VITE_SUPABASE_URL, accessToken); // Token client for RLS
 
         const { error } = await supabaseAuth
           .from('user_profiles')
@@ -94,7 +81,7 @@ export default function usePush() {
           .eq('id', user.id);
 
         if (error) {
-          console.error('Save error:', error.message, error.details, error.hint); // Enhanced logging
+          console.error('Save error:', error.message, error.details, error.hint);
         } else {
           console.log('🔔 Saved!');
         }
@@ -104,13 +91,14 @@ export default function usePush() {
     };
 
     initAndSubscribe();
-  }, [user, initialized]); // Added initialized to dependency
+  }, [user, initialized]);
 
   return {
     requestPushPermission: async () => {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
-        await OneSignal.Slidedown.promptPush();
+        // @ts-ignore
+        await OneSignal.showSlidedownPrompt();
       }
     },
   };
