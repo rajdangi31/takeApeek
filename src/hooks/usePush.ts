@@ -48,19 +48,16 @@ export default function usePush() {
           return;
         }
 
-        // @ts-ignore
-        await OneSignal.showSlidedownPrompt();
+        await OneSignal.Slidedown.promptPush();
 
-        // @ts-ignore
-        const isSubscribed = await OneSignal.isPushNotificationsEnabled();
+        const isSubscribed = await OneSignal.User.PushSubscription.optedIn;
         console.log('Is Subscribed to OneSignal:', isSubscribed);
         if (!isSubscribed) {
           console.log('User is not subscribed to OneSignal push notifications.');
           return;
         }
 
-        // @ts-ignore
-        const playerId = await OneSignal.getUserId();
+        const playerId = OneSignal.User.onesignalId;
         console.log('OneSignal Player ID:', playerId);
         if (!playerId) {
           console.log('Could not retrieve OneSignal Player ID.');
@@ -106,8 +103,7 @@ export default function usePush() {
       if ('Notification' in window) {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-          // @ts-ignore
-          await OneSignal.showSlidedownPrompt();
+          await OneSignal.Slidedown.promptPush();
         }
       }
     },
