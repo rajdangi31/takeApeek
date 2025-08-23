@@ -1,16 +1,24 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import OneSignal from 'react-onesignal';
 import { useAuth } from '../contexts/AuthContext';
 import { createClient } from '@supabase/supabase-js';
 
 export default function usePush() {
   const { user } = useAuth();
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    if (!user) return;
+
     const initAndSubscribe = async () => {
-      console.log('Starting initAndSubscribe...'); // Debug start
-      if (!user || !('Notification' in window) || !('serviceWorker' in navigator)) {
-        console.log('Skipping: No user or browser support for notifications.');
+      console.log('Starting initAndSubscribe...');
+      if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+        console.log('Skipping: No browser support.');
+        return;
+      }
+
+      if (initialized) {
+        console.log('Already initialized - skipping.');
         return;
       }
 
@@ -40,71 +48,59 @@ export default function usePush() {
           },
         });
         console.log('OneSignal initialized');
+        setInitialized(true);
 
         const permission = await Notification.requestPermission();
-        console.log('Notification Permission:', permission);
-        if (permission !== 'granted') {
-          console.log('Notification permission was not granted.');
-          return;
-        }
+        console.log('Permission:', permission);
+        if (permission !== 'granted') return;
 
         await OneSignal.Slidedown.promptPush();
 
-        const isSubscribed = await OneSignal.User.PushSubscription.optedIn;
-        console.log('Is Subscribed to OneSignal:', isSubscribed);
-        if (!isSubscribed) {
-          console.log('User is not subscribed to OneSignal push notifications.');
-          return;
-        }
+        const isSubscribed = OneSignal.User.PushSubscription.optedIn;
+        console.log('Subscribed:', isSubscribed);
+        if (!isSubscribed) return;
 
-        const playerId = OneSignal.User.onesignalId;
-        console.log('OneSignal Player ID:', playerId);
-        if (!playerId) {
-          console.log('Could not retrieve OneSignal Player ID.');
-          return;
-        }
+        const onesignalId = OneSignal.User.onesignalId; // Consistent naming
+        console.log('OneSignal ID:', onesignalId);
+        if (!onesignalId) return;
 
         const supabase = createClient(
           import.meta.env.VITE_SUPABASE_URL,
           import.meta.env.VITE_SUPABASE_ANON_KEY
         );
-        const { data: { session } } = await supabase.auth.getSession();
-        const accessToken = session?.access_token;
-        console.log('Supabase Access Token:', accessToken ? 'Present' : 'Missing');
-        if (!accessToken) {
-          console.error('No Supabase access token found. User might not be properly authenticated.');
-          return;
-        }
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        console.log('Access Token:', accessToken ? 'Present' : 'Missing');
+        if (!accessToken) return;
 
-        // It is not recommended to create a new client with the access token directly.
-        // The existing supabase client instance from `supabase-client.ts` will manage the auth token.
-        // We will use the originally imported supabase client for the update.
-        // The RLS policy will use the JWT from the request.
-        const { error } = await supabase
+        const supabaseAuth = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          accessToken
+        );
+
+        const { error } = await supabaseAuth
           .from('user_profiles')
-          .update({ onesignal_id: playerId })
+          .update({ onesignal_id: onesignalId })
           .eq('id', user.id);
+
         if (error) {
-          console.error('Failed to save OneSignal player ID to Supabase:', error.message, error.details);
+          console.error('Save error:', error.message, error.details, error.hint);
         } else {
-          console.log('🔔 OneSignal player ID saved to Supabase successfully!');
+          console.log('🔔 Saved!');
         }
       } catch (err) {
-        console.error('An error occurred during OneSignal initialization or subscription:', err);
+        console.error('Init error:', err);
       }
     };
 
     initAndSubscribe();
-  }, [user]);
+  }, [user, initialized]);
 
   return {
-    // Optional manual trigger
     requestPushPermission: async () => {
-      if ('Notification' in window) {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-          await OneSignal.Slidedown.promptPush();
-        }
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        await OneSignal.Slidedown.promptPush();
       }
     },
   };
