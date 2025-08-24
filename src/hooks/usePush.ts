@@ -1,292 +1,141 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import OneSignal from 'react-onesignal';
 import { useAuth } from '../contexts/AuthContext';
 import { createClient } from '@supabase/supabase-js';
 
-// Global state management for OneSignal
-const oneSignalState = {
-  initialized: false,
-  initializing: false,
-  lastPlayerId: null as string | null,
-};
+// Global flag to prevent multiple initializations
+let oneSignalInitialized = false;
 
 export default function usePush() {
   const { user } = useAuth();
-  const [pushStatus, setPushStatus] = useState<{
-    initialized: boolean;
-    subscribed: boolean;
-    playerId: string | null;
-    error: string | null;
-  }>({
-    initialized: false,
-    subscribed: false,
-    playerId: null,
-    error: null,
-  });
+  const [initialized, setInitialized] = useState(false);
 
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!user || oneSignalInitialized) return;
 
-  const supabase = createClient(
-    import.meta.env.VITE_SUPABASE_URL,
-    import.meta.env.VITE_SUPABASE_ANON_KEY
-  );
+    const initAndSubscribe = async () => {
+      console.log('Starting initAndSubscribe...');
 
-  // Initialize OneSignal once per app lifecycle
-  const initializeOneSignal = useCallback(async () => {
-    if (oneSignalState.initialized || oneSignalState.initializing) {
-      console.log('🔄 OneSignal already initialized or initializing');
-      return true;
-    }
-
-    console.log('🚀 Initializing OneSignal...');
-    oneSignalState.initializing = true;
-
-    try {
-      await OneSignal.init({
-        appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
-        allowLocalhostAsSecureOrigin: true,
-        serviceWorkerParam: { scope: '/' },
-        serviceWorkerPath: '/OneSignalSDKWorker.js',
-        // Remove notifyButton since we’re handling subscription manually
-      });
-
-      oneSignalState.initialized = true;
-      oneSignalState.initializing = false;
-
-      console.log('✅ OneSignal initialized successfully');
-
-      // Set up event listeners
-      OneSignal.User.PushSubscription.addEventListener('change', handleSubscriptionChange);
-
-      return true;
-    } catch (error: any) {
-      console.error('❌ OneSignal initialization error:', error);
-      oneSignalState.initializing = false;
-      setPushStatus(prev => ({ ...prev, error: 'Failed to initialize OneSignal' }));
-      return false;
-    }
-  }, []);
-
-  // Handle subscription state changes
-  const handleSubscriptionChange = useCallback((event: any) => {
-    console.log('🔄 OneSignal subscription changed:', event);
-
-    const isSubscribed: boolean = !!OneSignal.User.PushSubscription.optedIn;
-    const playerId: string | null = OneSignal.User.onesignalId ?? null;
-
-    console.log('New subscription state:', { isSubscribed, playerId });
-
-    setPushStatus(prev => ({
-      ...prev,
-      subscribed: isSubscribed,
-      playerId: playerId,
-    }));
-
-    // Update database if we have a new player ID
-    if (playerId && playerId !== oneSignalState.lastPlayerId) {
-      oneSignalState.lastPlayerId = playerId;
-      updatePlayerIdInDatabase(playerId);
-    }
-  }, [user]);
-
-  // Update player ID in database with retry logic
-  const updatePlayerIdInDatabase = useCallback(async (playerId: string, retryCount = 0) => {
-    if (!user) return;
-
-    try {
-      console.log(`🔄 Updating database with player ID: ${playerId} (attempt ${retryCount + 1})`);
-
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData?.session) {
-        throw new Error('No valid session');
+      if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+        console.log('Skipping: No browser support.');
+        return;
       }
 
-      await supabase.auth.setSession(sessionData.session);
+      try {
+        // Mark as initializing to prevent race conditions
+        oneSignalInitialized = true;
 
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({
-          onesignal_id: playerId,
-          onesignal_updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      console.log('✅ Player ID updated successfully in database');
-
-      // Verify the update worked
-      await verifyDatabaseUpdate(playerId);
-
-    } catch (error: any) {
-      console.error('❌ Database update error:', error);
-
-      // Retry up to 3 times with exponential backoff
-      if (retryCount < 3) {
-        const delay = Math.pow(2, retryCount) * 1000;
-        console.log(`🔄 Retrying database update in ${delay}ms...`);
-
-        retryTimeoutRef.current = setTimeout(() => {
-          updatePlayerIdInDatabase(playerId, retryCount + 1);
-        }, delay);
-      } else {
-        setPushStatus(prev => ({ ...prev, error: 'Failed to update database' }));
-      }
-    }
-  }, [user, supabase]);
-
-  // Verify database update
-  const verifyDatabaseUpdate = useCallback(async (expectedPlayerId: string) => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('onesignal_id')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-
-      if (data.onesignal_id === expectedPlayerId) {
-        console.log('✅ Database update verified');
-      } else {
-        console.warn('⚠️ Database verification failed:', {
-          expected: expectedPlayerId,
-          actual: data.onesignal_id
+        await OneSignal.init({
+          appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
+          allowLocalhostAsSecureOrigin: true,
+          notifyButton: {
+            enable: true,
+            prenotify: true,
+            showCredit: false,
+            text: {
+              'tip.state.unsubscribed': 'Subscribe to notifications',
+              'tip.state.subscribed': "You're subscribed to notifications",
+              'tip.state.blocked': "You've blocked notifications",
+              'message.prenotify': 'Click to subscribe to notifications',
+              'message.action.subscribed': 'Thanks for subscribing!',
+              'message.action.resubscribed': "You're subscribed again!",
+              'message.action.unsubscribed': "You won't receive notifications anymore",
+              'message.action.subscribing': 'Subscribing...',
+              'dialog.main.title': 'Notifications Settings',
+              'dialog.main.button.subscribe': 'SUBSCRIBE',
+              'dialog.main.button.unsubscribe': 'UNSUBSCRIBE',
+              'dialog.blocked.title': 'Unblock Notifications',
+              'dialog.blocked.message': 'Please follow these instructions to allow notifications:',
+            },
+          },
         });
-      }
-    } catch (error: any) {
-      console.error('❌ Database verification error:', error);
-    }
-  }, [user, supabase]);
 
-  // Request push permission and subscribe
-  const requestPushPermission = useCallback(async () => {
-    if (!oneSignalState.initialized) {
-      const initialized = await initializeOneSignal();
-      if (!initialized) return false;
-    }
+        console.log('OneSignal initialized');
+        setInitialized(true);
 
-    try {
-      console.log('📱 Requesting notification permission...');
+        const permission = await Notification.requestPermission();
+        console.log('Permission:', permission);
 
-      const permission = await Notification.requestPermission();
-      console.log('📱 Permission result:', permission);
+        if (permission !== 'granted') return;
 
-      if (permission !== 'granted') {
-        setPushStatus(prev => ({ ...prev, error: 'Notification permission denied' }));
-        return false;
-      }
-
-      // Subscribe to push notifications
-      console.log('🔔 Subscribing to push notifications...');
-      await OneSignal.Slidedown.promptPush();
-
-      // Wait for subscription to complete
-      let attempts = 0;
-      const maxAttempts = 20;
-
-      while (attempts < maxAttempts) {
-        const isSubscribed: boolean = !!OneSignal.User.PushSubscription.optedIn;
-        const playerId: string | null = OneSignal.User.onesignalId ?? null;
-
-        console.log(`⏳ Subscription check ${attempts + 1}/${maxAttempts}:`, { isSubscribed, playerId });
-
-        if (isSubscribed && playerId) {
-          console.log('✅ Successfully subscribed to push notifications');
-
-          setPushStatus({
-            initialized: true,
-            subscribed: true,
-            playerId: playerId,
-            error: null,
-          });
-
-          // Update database
-          await updatePlayerIdInDatabase(playerId);
-          return true;
+        await OneSignal.Slidedown.promptPush();
+        
+        // Wait for subscription to complete and ID to be generated
+        let attempts = 0;
+        let onesignalId = null;
+        
+        while (!onesignalId && attempts < 10) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          const isSubscribed = OneSignal.User.PushSubscription.optedIn;
+          console.log(`Attempt ${attempts + 1} - Subscribed:`, isSubscribed);
+          
+          if (!isSubscribed) {
+            attempts++;
+            continue;
+          }
+          
+          onesignalId = OneSignal.User.onesignalId;
+          console.log(`Attempt ${attempts + 1} - OneSignal ID:`, onesignalId);
+          
+          if (!onesignalId) {
+            attempts++;
+          }
         }
 
-        await new Promise(resolve => setTimeout(resolve, 500));
-        attempts++;
-      }
+        if (!onesignalId) {
+          console.log('Failed to get OneSignal ID after 10 attempts');
+          return;
+        }
 
-      throw new Error('Subscription timeout - unable to get player ID');
+        // Create Supabase client with proper authentication
+        const supabase = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY
+        );
 
-    } catch (error: any) {
-      console.error('❌ Push permission error:', error);
-      setPushStatus(prev => ({ ...prev, error: error.message || 'Unknown error' }));
-      return false;
-    }
-  }, [initializeOneSignal, updatePlayerIdInDatabase]);
+        // Get the session to use the access token for RLS
+        const { data: sessionData } = await supabase.auth.getSession();
+        const session = sessionData?.session;
+        
+        console.log('Access Token:', session?.access_token ? 'Present' : 'Missing');
 
-  // Check existing subscription status
-  const checkExistingSubscription = useCallback(async () => {
-    if (!oneSignalState.initialized) return;
+        if (!session?.access_token) {
+          console.log('No session or access token available');
+          return;
+        }
 
-    try {
-      const isSubscribed: boolean = !!OneSignal.User.PushSubscription.optedIn;
-      const playerId: string | null = OneSignal.User.onesignalId ?? null;
+        // Set the session for the authenticated user
+        await supabase.auth.setSession(session);
 
-      console.log('🔍 Checking existing subscription:', { isSubscribed, playerId });
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ onesignal_id: onesignalId })
+          .eq('id', user.id);
 
-      setPushStatus({
-        initialized: true,
-        subscribed: isSubscribed,
-        playerId: playerId,
-        error: null,
-      });
+        if (error) {
+          console.error('Save error:', error.message, error.details, error.hint);
+        } else {
+          console.log('🔔 OneSignal ID saved successfully!');
+        }
 
-      // If we have a player ID but it's different from what's in the database, update it
-      if (playerId && playerId !== oneSignalState.lastPlayerId) {
-        oneSignalState.lastPlayerId = playerId;
-        await updatePlayerIdInDatabase(playerId);
-      }
-
-    } catch (error: any) {
-      console.error('❌ Error checking subscription:', error);
-      setPushStatus(prev => ({ ...prev, error: 'Failed to check subscription status' }));
-    }
-  }, [updatePlayerIdInDatabase]);
-
-  // Main effect - initialize and check status
-  useEffect(() => {
-    if (!user) return;
-
-    const initAndCheck = async () => {
-      console.log('🔄 Starting push notification setup for user:', user.id);
-
-      // Initialize OneSignal
-      const initialized = await initializeOneSignal();
-      if (!initialized) return;
-
-      // Check existing subscription
-      await checkExistingSubscription();
-    };
-
-    initAndCheck();
-
-    // Cleanup
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
+      } catch (err) {
+        console.error('Init error:', err);
+        // Reset the flag on error so it can be retried
+        oneSignalInitialized = false;
       }
     };
-  }, [user?.id, initializeOneSignal, checkExistingSubscription]);
 
-  // Cleanup effect
-  useEffect(() => {
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-      }
-    };
-  }, []);
+    initAndSubscribe();
+  }, [user?.id]); // Only depend on user.id to prevent unnecessary re-runs
 
   return {
-    ...pushStatus,
-    requestPushPermission,
-    refreshSubscription: checkExistingSubscription,
+    initialized,
+    requestPushPermission: async () => {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        await OneSignal.Slidedown.promptPush();
+      }
+    },
   };
 }
