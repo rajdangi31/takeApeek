@@ -90,25 +90,25 @@ export const Navbar = () => {
               </button>
             </div>
           ) : (
-            <button
-              onClick={signInWithGoogle}
+            <Link
+              to="/login"
               className="px-5 py-2 rounded-xl text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 transition-shadow shadow-lg flex items-center gap-2"
             >
               <LogIn size={18} />
               Sign In
-            </button>
+            </Link>
           )}
         </div>
 
         {/* Mobile Menu Toggle */}
         <div className="md:hidden flex items-center gap-2">
             {!user && (
-                 <button
-                 onClick={signInWithGoogle}
+                 <Link
+                 to="/login"
                  className="p-2 rounded-xl bg-slate-900 text-white shadow-lg"
                >
                  <LogIn size={20} />
-               </button>
+               </Link>
             )}
           <button
             onClick={() => setMenuOpen(!menuOpen)}

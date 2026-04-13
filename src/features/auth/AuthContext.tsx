@@ -5,6 +5,8 @@ interface AuthContextType {
     user: User | null;
     loading: boolean;
     signInWithGoogle: () => void;
+    signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
+    signUpWithEmail: (email: string, password: string, metadata?: any) => Promise<{ error: any }>;
     signOut: () => void;
 }
 
@@ -17,7 +19,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
         console.log("[Auth] Mount: Initializing session...");
 
-        // 1. Set up the listener first
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log(`[Auth] Event: ${event}`, session?.user?.id || "No session");
 
@@ -27,16 +28,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 setUser(null);
             }
 
-            // We only stop loading once we've received the initial session event
-            // or a successful sign-in
             if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
                 setLoading(false);
                 console.log("[Auth] Loading finished via event:", event);
             }
         });
-
-        // 2. We don't need a separate initSession with its own setLoading(false)
-        // as onAuthStateChange will trigger INITIAL_SESSION automatically.
 
         return () => {
             subscription.unsubscribe();
@@ -53,13 +49,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
     };
 
+    const signInWithEmail = async (email: string, password: string) => {
+        console.log("[Auth] Initiating Email Sign-In...");
+        const result = await supabase.auth.signInWithPassword({ email, password });
+        return { error: result.error };
+    };
+
+    const signUpWithEmail = async (email: string, password: string, metadata: any = {}) => {
+        console.log("[Auth] Initiating Email Sign-Up...");
+        const result = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: metadata,
+            }
+        });
+        return { error: result.error };
+    };
+
     const signOut = async () => {
         console.log("[Auth] Initiating Sign-Out...");
         await supabase.auth.signOut();
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut }}>
+        <AuthContext.Provider value={{ user, loading, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut }}>
             {children}
         </AuthContext.Provider>
     );
