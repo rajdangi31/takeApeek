@@ -13,10 +13,22 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   bio text,
   website text,
   is_private boolean default false,
-  push_subscription jsonb,
-  push_enabled boolean default false,
   created_at timestamptz default now()
 );
+
+CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  endpoint text not null,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz default now(),
+  unique(user_id, endpoint)
+);
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own push subscriptions" ON push_subscriptions 
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
