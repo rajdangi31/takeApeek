@@ -12,8 +12,8 @@ export const ProtectedRoute = ({ children }: Props) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && !user) {
-      console.log("[RouteGuard] No user detected. Imperative redirect to /login from:", location.pathname);
+    if (!loading && !user && location.pathname !== "/login") {
+      console.log("[RouteGuard] No user detected. Guarded imperative redirect to /login from:", location.pathname);
       navigate("/login", { state: { from: location }, replace: true });
     }
   }, [user, loading, navigate, location]);

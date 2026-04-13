@@ -12,12 +12,14 @@ export const LoginPage = () => {
     // If user is already logged in, redirect them away from the login page
     useEffect(() => {
         if (!loading && user) {
-            console.log("[LoginPage] User detected. Imperative redirecting...");
+            console.log("[LoginPage] User detected. Checking redirect target...");
             const from = (location.state as any)?.from?.pathname || "/";
-            // Prevent redirect loop if 'from' is current page
             const safeFrom = from === "/login" ? "/" : from;
-            console.log(`[LoginPage] Safe Redirect to: ${safeFrom}`);
-            navigate(safeFrom, { replace: true });
+            
+            if (location.pathname !== safeFrom) {
+                console.log(`[LoginPage] Guarded Safe Redirect to: ${safeFrom}`);
+                navigate(safeFrom, { replace: true });
+            }
         }
     }, [user, loading, navigate, location]);
 
@@ -31,7 +33,7 @@ export const LoginPage = () => {
 
     return (
         <div className="min-h-[80vh] flex flex-col items-center justify-center px-4">
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="w-full max-w-md glass-effect rounded-[3rem] p-10 border-white/60 shadow-2xl relative overflow-hidden"
@@ -42,7 +44,7 @@ export const LoginPage = () => {
 
                 <div className="relative z-10 text-center space-y-8">
                     {/* Logo Section */}
-                    <motion.div 
+                    <motion.div
                         initial={{ y: -20 }}
                         animate={{ y: 0 }}
                         className="flex flex-col items-center gap-4"
@@ -56,13 +58,13 @@ export const LoginPage = () => {
                             Take<span className="text-pink-500">APeek</span>
                         </h1>
                         <p className="text-slate-400 font-medium text-sm max-w-[200px] leading-relaxed">
-                            Captured moments with your closest circle. 
+                            Captured moments with your closest circle.
                         </p>
                     </motion.div>
 
                     {/* Action Section */}
                     <div className="space-y-4">
-                         <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100/50 text-left">
+                        <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100/50 text-left">
                             <h4 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
                                 <Sparkles size={12} className="text-pink-400" /> Getting Started
                             </h4>
@@ -92,7 +94,7 @@ export const LoginPage = () => {
             </motion.div>
 
             {/* Subtle background text */}
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 0.05 }}
                 className="fixed bottom-10 left-0 right-0 pointer-events-none select-none overflow-hidden whitespace-nowrap"
