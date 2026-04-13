@@ -15,26 +15,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Check active sessions and sets the user
+        console.log("[Auth] Mount: Initializing session...");
+
         const initSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            setUser(session?.user ?? null);
-            setLoading(false);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                console.log("[Auth] getSession result:", session?.user?.id || "No session");
+                
+                if (session?.user) {
+                    const { data: { user: verifiedUser }, error } = await supabase.auth.getUser();
+                    if (!error && verifiedUser) {
+                        console.log("[Auth] getUser verified:", verifiedUser.id);
+                        setUser(verifiedUser);
+                    } else {
+                        setUser(null);
+                    }
+                } else {
+                    setUser(null);
+                }
+            } catch (err) {
+                console.error("[Auth] Initialization error:", err);
+                setUser(null);
+            } finally {
+                setLoading(false);
+                console.log("[Auth] Loading finished.");
+            }
         };
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setUser(session?.user ?? null);
-            setLoading(false);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log(`[Auth] Event: ${event}`, session?.user?.id || "No session");
+            
+            if (event === 'SIGNED_OUT') {
+                setUser(null);
+                setLoading(false);
+            } else if (session?.user) {
+                setUser(session.user);
+                setLoading(false);
+            }
         });
 
         initSession();
 
         return () => {
+            console.log("[Auth] Unmount: Unsubscribing...");
             subscription.unsubscribe();
         };
     }, []);
 
     const signInWithGoogle = async () => {
+        console.log("[Auth] Initiating Google Sign-In...");
         await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
@@ -44,6 +73,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const signOut = async () => {
+        console.log("[Auth] Initiating Sign-Out...");
         await supabase.auth.signOut();
     };
 

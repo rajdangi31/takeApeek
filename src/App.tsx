@@ -67,7 +67,7 @@ function App() {
                 className="page-transition-wrapper h-full"
               >
                 <Suspense fallback={<PageLoader />}>
-                  <Routes location={location} key={location.pathname}>
+                  <Routes location={location}>
                     <Route path="/login" element={<LoginPage />} />
 
                     <Route path="/" element={

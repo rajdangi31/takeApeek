@@ -11,13 +11,15 @@ export const ProtectedRoute = ({ children }: Props) => {
   const location = useLocation();
 
   if (loading) {
-    return null; // Or a loading spinner
+    console.log("[RouteGuard] Loading... suppressing redirect.");
+    return null;
   }
 
   if (!user) {
-    // Redirect to login but save the current location to return to after login
+    console.log("[RouteGuard] No user detected. Redirecting to /login from:", location.pathname);
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  console.log("[RouteGuard] User authorized:", user.id);
   return <>{children}</>;
 };

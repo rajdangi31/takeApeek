@@ -17,9 +17,11 @@ export const LoginPage = () => {
 
     // If user is already logged in, redirect them away from the login page
     if (user) {
+        console.log("[LoginPage] User exists, preparing redirect...");
         const from = (location.state as any)?.from?.pathname || "/";
         // Prevent redirect loop if 'from' is current page
         const safeFrom = from === "/login" ? "/" : from;
+        console.log(`[LoginPage] Redirecting to: ${safeFrom} (raw from: ${from})`);
         return <Navigate to={safeFrom} replace />;
     }
 
