@@ -17,47 +17,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
         console.log("[Auth] Mount: Initializing session...");
 
-        const initSession = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                console.log("[Auth] getSession result:", session?.user?.id || "No session");
-                
-                if (session?.user) {
-                    const { data: { user: verifiedUser }, error } = await supabase.auth.getUser();
-                    if (!error && verifiedUser) {
-                        console.log("[Auth] getUser verified:", verifiedUser.id);
-                        setUser(verifiedUser);
-                    } else {
-                        setUser(null);
-                    }
-                } else {
-                    setUser(null);
-                }
-            } catch (err) {
-                console.error("[Auth] Initialization error:", err);
-                setUser(null);
-            } finally {
-                setLoading(false);
-                console.log("[Auth] Loading finished.");
-            }
-        };
-
+        // 1. Set up the listener first
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log(`[Auth] Event: ${event}`, session?.user?.id || "No session");
-            
-            if (event === 'SIGNED_OUT') {
-                setUser(null);
-                setLoading(false);
-            } else if (session?.user) {
+
+            if (session?.user) {
                 setUser(session.user);
+            } else {
+                setUser(null);
+            }
+
+            // We only stop loading once we've received the initial session event
+            // or a successful sign-in
+            if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
                 setLoading(false);
+                console.log("[Auth] Loading finished via event:", event);
             }
         });
 
-        initSession();
+        // 2. We don't need a separate initSession with its own setLoading(false)
+        // as onAuthStateChange will trigger INITIAL_SESSION automatically.
 
         return () => {
-            console.log("[Auth] Unmount: Unsubscribing...");
             subscription.unsubscribe();
         };
     }, []);
@@ -84,7 +65,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     );
 };
 
-export const useAuth = () : AuthContextType => {
+export const useAuth = (): AuthContextType => {
     const context = useContext(AuthContext)
     if (context === undefined) {
         throw new Error("useAuth must be used within the AuthProvider")

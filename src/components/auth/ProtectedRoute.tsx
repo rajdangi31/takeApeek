@@ -11,23 +11,24 @@ export const ProtectedRoute = ({ children }: Props) => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Check if we are currently in the middle of a Supabase OAuth redirect
+  const isProcessingAuth = window.location.hash.includes("access_token=") ||
+    window.location.search.includes("code=");
+
   useEffect(() => {
-    if (!loading && !user && location.pathname !== "/login") {
-      console.log("[RouteGuard] No user detected. Guarded imperative redirect to /login from:", location.pathname);
+    // Only redirect if we are NOT loading and NOT currently processing a hash
+    if (!loading && !user && !isProcessingAuth) {
+      console.log("[RouteGuard] No user detected. Redirecting to /login");
       navigate("/login", { state: { from: location }, replace: true });
     }
-  }, [user, loading, navigate, location]);
+  }, [user, loading, navigate, location, isProcessingAuth]);
 
-  if (loading) {
-    console.log("[RouteGuard] Loading... suppressing redirect.");
-    return null;
+  // Stay in loading state if processing a token
+  if (loading || isProcessingAuth) {
+    return null; // Or your <PageLoader />
   }
 
-  if (!user) {
-    // Return null while navigating to avoid rendering protected components
-    return null;
-  }
+  if (!user) return null;
 
-  console.log("[RouteGuard] User authorized:", user.id);
   return <>{children}</>;
 };
