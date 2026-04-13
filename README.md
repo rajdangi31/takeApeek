@@ -19,10 +19,10 @@
 
 ## 📖 The Vision
 
-**TakeAPeek** is a premium, real-time social discovery platform designed for intimate circles and high-fidelity interactions. Built with a world-class **"Glass & Glow"** design system, it bridges the gap between minimalist aesthetics and powerful serverless engineering.
+**TakeAPeek** is a real-time social discovery platform designed for intimate circles and high-fidelity interactions. Built with a **"Glass & Glow"** design system, it bridges the gap between minimalist aesthetics and serverless engineering.
 
 > [!IMPORTANT]
-> This project is a technical showcase of master-level web engineering, focusing on real-time data synchronization, polymorphic caching, and cinematic motion physics.
+> This project is a technical showcase of web engineering, focusing on real-time data synchronization, polymorphic caching, and cinematic motion physics.
 
 ---
 
@@ -123,7 +123,7 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 
 Crafted with high-fidelity heart by **Raj Dangi**.
 
-[LinkedIn](https://www.linkedin.com/in/rajdangi/) • [Portfolio](https://rajdangi.dev) • [X / Twitter](https://twitter.com/rajdangi)
+[LinkedIn](https://www.linkedin.com/in/rajdangi01/) • [Portfolio](https://philosrach.com) • [X / Twitter](https://x.com/philosrach)
 
 ---
-*TakeAPeek © 2026. Discover the Peek-verse.*
+*TakeAPeek © 2026.*
