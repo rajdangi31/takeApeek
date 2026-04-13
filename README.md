@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./github_banner_1776115811085.png" alt="TakeAPeek Banner" width="100%">
+  <img src="./github_banner.png" alt="TakeAPeek Banner" width="100%">
 
   # TakeAPeek 👀
   **Discover the Unfiltered. Connect in the Glow.**
@@ -23,6 +23,10 @@
 
 > [!IMPORTANT]
 > This project is a technical showcase of web engineering, focusing on real-time data synchronization, polymorphic caching, and cinematic motion physics.
+
+<div align="center">
+  <img src="./social_preview.png" alt="TakeAPeek Social Preview" width="80%">
+</div>
 
 ---
 
