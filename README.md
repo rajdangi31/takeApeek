@@ -17,9 +17,7 @@
 
 </div>
 
-<div align="center">
-  <img src="./homepage_showcase.png" alt="TakeAPeek Homepage Showcase" width="100%">
-</div>
+[![TakeAPeek Homepage Showcase](./homepage_showcase.png)](./homepage_showcase.png)
 
 ---
 
