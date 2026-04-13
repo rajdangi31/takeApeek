@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "./supabase-client";
+import { supabase } from "../../lib/supabase";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -120,13 +120,17 @@ export const usePushNotifications = (userId?: string) => {
 
       /* Store in DB */
       console.log("💾 Saving to database...");
+      
+      const subJSON = sub.toJSON();
+      
       const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          push_subscription: sub.toJSON(),
-          push_enabled: true,
-        })
-        .eq("id", userId);
+        .from("push_subscriptions")
+        .upsert({
+          user_id: userId,
+          endpoint: subJSON.endpoint!,
+          p256dh: subJSON.keys?.p256dh!,
+          auth: subJSON.keys?.auth!
+        }, { onConflict: 'user_id, endpoint' });
 
       if (error) {
         console.error("❌ Database error:", error);
@@ -160,12 +164,10 @@ export const usePushNotifications = (userId?: string) => {
       await subscription.unsubscribe();
 
       const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          push_subscription: null,
-          push_enabled: false,
-        })
-        .eq("id", userId);
+        .from("push_subscriptions")
+        .delete()
+        .eq("user_id", userId)
+        .eq("endpoint", subscription.endpoint);
 
       if (error) throw error;
 

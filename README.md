@@ -1,54 +1,129 @@
-# React + TypeScript + Vite
+<div align="center">
+  <img src="./github_banner_1776115811085.png" alt="TakeAPeek Banner" width="100%">
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+  # TakeAPeek 👀
+  **Discover the Unfiltered. Connect in the Glow.**
+  
+  [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-red.svg)](https://www.gnu.org/licenses/agpl-3.0)
+  [![Vite](https://img.shields.io/badge/Vite-6.x-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+  [![React](https://img.shields.io/badge/React-18.x-61DAFB?logo=react&logoColor=white)](https://reactjs.org/)
+  [![Supabase](https://img.shields.io/badge/Supabase-DB_%26_Auth-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com/)
+  [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+  [![Vitest](https://img.shields.io/badge/Vitest-Passing-3CB371?logo=vitest&logoColor=white)](https://vitest.dev/)
 
-Currently, two official plugins are available:
+  ---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+  [Live Demo](https://take-apeek-gbvwcfi2y-raj-s-projects-40feb981.vercel.app/) • [Report Bug](https://github.com/rajdangi31/takeApeek/issues) • [Request Feature](https://github.com/rajdangi31/takeApeek/issues)
 
-## Expanding the ESLint configuration
+</div>
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 📖 The Vision
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+**TakeAPeek** is a premium, real-time social discovery platform designed for intimate circles and high-fidelity interactions. Built with a world-class **"Glass & Glow"** design system, it bridges the gap between minimalist aesthetics and powerful serverless engineering.
+
+> [!IMPORTANT]
+> This project is a technical showcase of master-level web engineering, focusing on real-time data synchronization, polymorphic caching, and cinematic motion physics.
+
+---
+
+## ✨ Feature Cinematic
+
+### 🌍 Social Discovery
+- **3-Column Architecture**: Fixed professional navigation, central liquid-feed, and a discovery-focused right sidebar.
+- **Infinite Horizon**: Seamless infinite scrolling powered by windowed fetching for sub-second performance.
+- **Re-peeking**: A native re-sharing mechanism that preserves original author credit while expanding discovery.
+
+### 👤 Identity & Interaction
+- **Dynamic Profiles**: High-fidelity personal hubs with real-time identity management (Bio, Display Name, Grid View).
+- **Threaded Conversations**: Recursive multi-level comments with visual thread-nesting and cinematic collapse logic.
+- **Real-time Pulse**: Instant likes, comment counters, and friend activity badges synchronized across all devices.
+
+### 🔐 Infrastructure & Security
+- **Auth Gateway**: Cinematic Google OAuth entry point with protected social guarding.
+- **Push Intelligence**: Proactive VAPID notifications via Supabase Edge Functions.
+- **Strict RLS**: Military-grade database privacy policies ensuring your peeks stay between friends.
+
+---
+
+## 🛠️ The Tech Forge
+
+### Core Engine
+- **Frontend**: React 18 + TypeScript (Strict Mode)
+- **Build Tool**: Vite 6 (ESBuild optimization)
+- **Styling**: Tailwind CSS v4 (Leveraging HSL tokens & fluid sizing)
+- **State Mgmt**: TanStack React Query v5 (Optimistic updates & windowed caching)
+
+### Backend & Logic
+- **Database**: Supabase (PostgreSQL with Denormalized triggers)
+- **Real-time**: Supabase Channels (Broadcast & DB Change Listeners)
+- **Cloud logic**: Supabase Edge Functions (Deno Runtime)
+- **Security**: Supabase Auth + Row-Level Security (RLS) policies
+
+### Quality & Motion
+- **Animations**: Framer Motion 12 (Spring-based physics, Layout ID transitions)
+- **Testing**: Vitest + JSDOM (@testing-library/react)
+- **CI/CD**: GitHub Quality Guard (Automated Linting, Testing, & Production Build)
+
+---
+
+## 🏗️ System Architecture
+
+### Multi-Directional Flux (Mermaid)
+
+```mermaid
+graph TD
+    A[Client UI] -->|Mutation| B[TanStack Query Cache]
+    B -->|Optimistic UI| A
+    B -->|Persist| C[Supabase Cloud]
+    C -->|Trigger| D[Postgres Function]
+    D -->|Notify| E[Edge Function]
+    E -->|Push| F[Service Worker]
+    F -->|Toast| A
+    C -->|Broadcast| G[Realtime Channel]
+    G -->|Invalidate| B
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 🚀 Installation & Forge
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+### 1. Initialize
+```bash
+git clone https://github.com/rajdangi31/takeApeek.git
+cd takeApeek
+npm install --legacy-peer-deps
 ```
+
+### 2. Configure Keys
+Create a `.env` in the root and synchronize with your Supabase Project:
+```bash
+VITE_SUPABASE_URL=your_project_url
+VITE_SUPABASE_ANON_KEY=your_anon_key
+VITE_VAPID_PUBLIC_KEY=your_vapid_public_key
+```
+
+### 3. Database Schema
+Execute the following SQL scripts in your Supabase SQL Editor:
+1. `takeapeek_supabase_init.sql` (Core Schema & RLS)
+2. `phase3_notifications.sql` (Edge Function Triggers)
+3. `phase5_repeeks.sql` (Social Sharing Mechanics)
+
+---
+
+## 🛡️ License & Legal
+
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+> [!CAUTION]
+> **To the Community**: You are encouraged to study, learn from, and fork this project. However, per the AGPL-3.0 terms, **you MUST provide credit to the original author (Raj Dangi)** and any network-hosted derivative works MUST open-source their own code under the same license. Commercial use without attribution or as closed-source is strictly prohibited.
+
+---
+
+## 👨‍💻 Author
+
+Crafted with high-fidelity heart by **Raj Dangi**.
+
+[LinkedIn](https://www.linkedin.com/in/rajdangi/) • [Portfolio](https://rajdangi.dev) • [X / Twitter](https://twitter.com/rajdangi)
+
+---
+*TakeAPeek © 2026. Discover the Peek-verse.*

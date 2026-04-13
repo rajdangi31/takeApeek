@@ -1,30 +1,59 @@
 {
   "name": "takeapeek",
   "version": "1.0.0",
+  "description": "A high-fidelity social discovery platform built with React, Tailwind v4, and Supabase.",
+  "author": "Raj Dangi <raj@rajdangi.dev> (https://rajdangi.dev)",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rajdangi31/takeApeek.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rajdangi31/takeApeek/issues"
+  },
+  "homepage": "https://take-apeek.vercel.app",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "lint": "eslint ."
   },
   "type": "module",
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
     "@tailwindcss/vite": "^4.1.7",
     "@tanstack/react-query": "^5.76.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
     "lucide-react": "^0.511.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-error-boundary": "^6.1.1",
     "react-router": "^7.6.0",
-    "react-router-dom": "^6.30.0"
+    "react-router-dom": "^6.30.0",
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4.1.7",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
-    "@vitejs/plugin-react": "^4.4.1",
+    "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.21",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-dom": "^4.2.3",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "eslint-plugin-react-x": "^4.2.3",
+    "jsdom": "^29.0.2",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.7",
-    "vite": "^6.3.5"
+    "typescript-eslint": "^8.58.2",
+    "vite": "^6.3.5",
+    "vitest": "^4.1.4"
   }
 }

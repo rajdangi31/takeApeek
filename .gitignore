@@ -53,3 +53,8 @@ dist-ssr
 client_secret_*.json
 *.docx
 *seed*.sql
+
+# Tools & Local Backups
+extract_seed.py
+supabase/
+takeapeek_seed_data.sql

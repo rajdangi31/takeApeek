@@ -1,10 +1,12 @@
--- ==========================================
--- TAKE-A-PEEK SUPABASE CORE SCHEMA INITIALIZATION
--- ==========================================
+-- =====================================================
+-- TAKE-A-PEEK SUPABASE CORE SCHEMA (CORRECTED ORDER)
+-- =====================================================
 
 -- -----------------------------------------------------
--- 1. PROFILES
+-- 1. TABLE DEFINITIONS (Dependencies first)
 -- -----------------------------------------------------
+
+-- Profiles: The foundation for all users
 CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid references auth.users primary key,
   username text unique not null,
@@ -16,28 +18,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   created_at timestamptz default now()
 );
 
-CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+-- Friendships: Needed for Post visibility logic
+CREATE TABLE IF NOT EXISTS public.friendships (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references public.profiles(id) on delete cascade not null,
-  endpoint text not null,
-  p256dh text not null,
-  auth text not null,
+  requester_id uuid references public.profiles(id) not null,
+  addressee_id uuid references public.profiles(id) not null,
+  status text check (status in ('pending', 'accepted', 'blocked')) default 'pending',
   created_at timestamptz default now(),
-  unique(user_id, endpoint)
+  unique(requester_id, addressee_id)
 );
 
-ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage own push subscriptions" ON push_subscriptions 
-  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
-CREATE POLICY "Users can insert their own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-
--- -----------------------------------------------------
--- 2. POSTS
--- -----------------------------------------------------
+-- Posts
 CREATE TABLE IF NOT EXISTS public.posts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.profiles(id) not null,
@@ -50,52 +41,7 @@ CREATE TABLE IF NOT EXISTS public.posts (
   updated_at timestamptz default now()
 );
 
-ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
-
--- Post RLS: Users can read posts from public accounts or active friends
-CREATE POLICY "Read posts from friends or public accounts" ON posts FOR SELECT USING (
-  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = posts.user_id AND is_private = false) OR
-  auth.uid() = posts.user_id OR
-  EXISTS (
-    SELECT 1 FROM friendships 
-    WHERE status = 'accepted' AND (
-      (requester_id = auth.uid() AND addressee_id = posts.user_id) OR
-      (addressee_id = auth.uid() AND requester_id = posts.user_id)
-    )
-  )
-);
-
-CREATE POLICY "Users can create posts" ON posts FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update their own posts" ON posts FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete their own posts" ON posts FOR DELETE USING (auth.uid() = user_id);
-
--- -----------------------------------------------------
--- 3. FRIENDSHIPS
--- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.friendships (
-  id uuid primary key default gen_random_uuid(),
-  requester_id uuid references public.profiles(id) not null,
-  addressee_id uuid references public.profiles(id) not null,
-  status text check (status in ('pending', 'accepted', 'blocked')) default 'pending',
-  created_at timestamptz default now(),
-  unique(requester_id, addressee_id)
-);
-
-ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;
-
--- Friendships RLS
-CREATE POLICY "Users can view their own friendships" ON friendships FOR SELECT 
-  USING (auth.uid() = requester_id OR auth.uid() = addressee_id);
-CREATE POLICY "Users can create friend requests" ON friendships FOR INSERT 
-  WITH CHECK (auth.uid() = requester_id);
-CREATE POLICY "Addressees or requesters can update friendship status" ON friendships FOR UPDATE 
-  USING (auth.uid() = addressee_id OR auth.uid() = requester_id);
-CREATE POLICY "Users can delete their friendships" ON friendships FOR DELETE 
-  USING (auth.uid() = requester_id OR auth.uid() = addressee_id);
-
--- -----------------------------------------------------
--- 4. COMMENTS
--- -----------------------------------------------------
+-- Comments
 CREATE TABLE IF NOT EXISTS public.comments (
   id uuid primary key default gen_random_uuid(),
   post_id uuid references public.posts(id) on delete cascade not null,
@@ -106,19 +52,7 @@ CREATE TABLE IF NOT EXISTS public.comments (
   created_at timestamptz default now()
 );
 
-ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "View comments on readable posts" ON comments FOR SELECT USING (
-  -- Falls back on the posts SELECT policy implicitly through the post reference, mapped cleanly below:
-  EXISTS(SELECT 1 FROM posts WHERE id = comments.post_id)
-);
-CREATE POLICY "Users can create comments" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own comments" ON comments FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own comments" ON comments FOR DELETE USING (auth.uid() = user_id);
-
--- -----------------------------------------------------
--- 5. LIKES (Polymorphic)
--- -----------------------------------------------------
+-- Likes (Polymorphic: Post or Comment)
 CREATE TABLE IF NOT EXISTS public.likes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.profiles(id) not null,
@@ -133,18 +67,7 @@ CREATE TABLE IF NOT EXISTS public.likes (
   unique nulls not distinct (user_id, comment_id)
 );
 
-ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "View likes on readable items" ON likes FOR SELECT USING (
-  (post_id IS NOT NULL AND EXISTS(SELECT 1 FROM posts WHERE id = likes.post_id)) OR
-  (comment_id IS NOT NULL AND EXISTS(SELECT 1 FROM comments WHERE id = likes.comment_id))
-);
-CREATE POLICY "Users can insert their own likes" ON likes FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete their own likes" ON likes FOR DELETE USING (auth.uid() = user_id);
-
--- -----------------------------------------------------
--- 6. NOTIFICATIONS
--- -----------------------------------------------------
+-- Notifications
 CREATE TABLE IF NOT EXISTS public.notifications (
   id uuid primary key default gen_random_uuid(),
   recipient_id uuid references public.profiles(id) not null,
@@ -156,16 +79,88 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   created_at timestamptz default now()
 );
 
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+-- Push Subscriptions (For WebPush/Mobile)
+CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  endpoint text not null,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz default now(),
+  unique(user_id, endpoint)
+);
 
+-- -----------------------------------------------------
+-- 2. ROW LEVEL SECURITY (RLS) POLICIES
+-- -----------------------------------------------------
+
+-- Profiles
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+
+-- Friendships
+ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view their own friendships" ON friendships FOR SELECT 
+  USING (auth.uid() = requester_id OR auth.uid() = addressee_id);
+CREATE POLICY "Users can create friend requests" ON friendships FOR INSERT 
+  WITH CHECK (auth.uid() = requester_id);
+CREATE POLICY "Addressees or requesters can update friendship status" ON friendships FOR UPDATE 
+  USING (auth.uid() = addressee_id OR auth.uid() = requester_id);
+CREATE POLICY "Users can delete their friendships" ON friendships FOR DELETE 
+  USING (auth.uid() = requester_id OR auth.uid() = addressee_id);
+
+-- Posts
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Read posts from friends or public accounts" ON posts FOR SELECT USING (
+  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = posts.user_id AND is_private = false) OR
+  auth.uid() = posts.user_id OR
+  EXISTS (
+    SELECT 1 FROM friendships 
+    WHERE status = 'accepted' AND (
+      (requester_id = auth.uid() AND addressee_id = posts.user_id) OR
+      (addressee_id = auth.uid() AND requester_id = posts.user_id)
+    )
+  )
+);
+CREATE POLICY "Users can create posts" ON posts FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own posts" ON posts FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own posts" ON posts FOR DELETE USING (auth.uid() = user_id);
+
+-- Comments
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "View comments on readable posts" ON comments FOR SELECT USING (
+  EXISTS(SELECT 1 FROM posts WHERE id = comments.post_id)
+);
+CREATE POLICY "Users can create comments" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own comments" ON comments FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own comments" ON comments FOR DELETE USING (auth.uid() = user_id);
+
+-- Likes
+ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "View likes on readable items" ON likes FOR SELECT USING (
+  (post_id IS NOT NULL AND EXISTS(SELECT 1 FROM posts WHERE id = likes.post_id)) OR
+  (comment_id IS NOT NULL AND EXISTS(SELECT 1 FROM comments WHERE id = likes.comment_id))
+);
+CREATE POLICY "Users can insert their own likes" ON likes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own likes" ON likes FOR DELETE USING (auth.uid() = user_id);
+
+-- Notifications
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own notifications" ON notifications FOR SELECT USING (auth.uid() = recipient_id);
 CREATE POLICY "Users can update own notifications" ON notifications FOR UPDATE USING (auth.uid() = recipient_id);
 
+-- Push Subscriptions
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own push subscriptions" ON push_subscriptions 
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
 -- -----------------------------------------------------
--- 7. DENORMALIZATION TRIGGERS
+-- 3. DENORMALIZATION FUNCTIONS & TRIGGERS
 -- -----------------------------------------------------
 
--- A. Post Likes Cache
+-- Post Likes Count
 CREATE OR REPLACE FUNCTION update_post_like_count() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'INSERT' AND NEW.post_id IS NOT NULL THEN
@@ -181,7 +176,7 @@ CREATE OR REPLACE TRIGGER update_post_like_count_trigger
 AFTER INSERT OR DELETE ON likes FOR EACH ROW
 EXECUTE FUNCTION update_post_like_count();
 
--- B. Post Comment Cache
+-- Post Comment Count
 CREATE OR REPLACE FUNCTION update_post_comment_count() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
@@ -197,7 +192,7 @@ CREATE OR REPLACE TRIGGER update_post_comment_count_trigger
 AFTER INSERT OR DELETE ON comments FOR EACH ROW
 EXECUTE FUNCTION update_post_comment_count();
 
--- C. Comment Likes Cache
+-- Comment Likes Count
 CREATE OR REPLACE FUNCTION update_comment_like_count() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'INSERT' AND NEW.comment_id IS NOT NULL THEN
@@ -214,7 +209,7 @@ AFTER INSERT OR DELETE ON likes FOR EACH ROW
 EXECUTE FUNCTION update_comment_like_count();
 
 -- -----------------------------------------------------
--- 8. RPC FEED FUNCTION (PREVENTS N+1)
+-- 4. RPC FEED FUNCTION (OPTIMIZED)
 -- -----------------------------------------------------
 CREATE OR REPLACE FUNCTION get_friend_feed(requesting_user_id uuid, page_limit int, page_offset int)
 RETURNS TABLE (
@@ -240,16 +235,15 @@ BEGIN
   FROM posts p
   JOIN profiles pr ON pr.id = p.user_id
   WHERE 
-    p.user_id = requesting_user_id -- User's own posts
+    p.user_id = requesting_user_id 
     OR EXISTS (
-      -- Or posts from friends
       SELECT 1 FROM friendships f 
       WHERE f.status = 'accepted' AND (
         (f.requester_id = requesting_user_id AND f.addressee_id = p.user_id) OR
         (f.addressee_id = requesting_user_id AND f.requester_id = p.user_id)
       )
     )
-    OR pr.is_private = false -- Or public posts (optional depending on product requirements)
+    OR pr.is_private = false 
   ORDER BY p.created_at DESC
   LIMIT page_limit OFFSET page_offset;
 END;

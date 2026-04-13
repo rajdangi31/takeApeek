@@ -1,35 +1,27 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 import './index.css';
-import App from './App.tsx'
-import { BrowserRouter as Router } from "react-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AuthProvider } from './contexts/AuthContext.tsx';
-
-const client = new QueryClient()
+import App from './App';
+import { BrowserRouter as Router } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
+import { AuthProvider } from './features/auth/AuthContext';
 
 // Enhanced Service Worker Registration for Vercel
 const registerServiceWorker = async () => {
   if ('serviceWorker' in navigator) {
     try {
       console.log('🔄 Registering service worker...');
-      
       const registration = await navigator.serviceWorker.register('/sw.js', {
         scope: '/',
-        updateViaCache: 'none' // Force fresh SW on updates
+        updateViaCache: 'none',
       });
-      
       console.log('✅ Service worker registered:', registration);
-      
-      // Wait for it to be ready
       await navigator.serviceWorker.ready;
       console.log('✅ Service worker ready and active');
-      
-      // Listen for updates
       registration.addEventListener('updatefound', () => {
         console.log('🔄 Service worker update found');
       });
-      
       return registration;
     } catch (error) {
       console.error('❌ Service worker registration failed:', error);
@@ -40,11 +32,9 @@ const registerServiceWorker = async () => {
   }
 };
 
-// Initialize service worker when page loads
 if (typeof window !== 'undefined') {
   window.addEventListener('load', () => {
-    // Only register in production or localhost
-    if (process.env.NODE_ENV === 'production' || window.location.hostname === 'localhost') {
+    if (import.meta.env.PROD || window.location.hostname === 'localhost') {
       registerServiceWorker().catch(console.error);
     }
   });
@@ -52,12 +42,12 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={client}>
-      <AuthProvider>
-        <Router>
+    <QueryClientProvider client={queryClient}>
+      <Router>
+        <AuthProvider>
           <App />
-        </Router>
-      </AuthProvider>
+        </AuthProvider>
+      </Router>
     </QueryClientProvider>
   </StrictMode>
-)
+);
