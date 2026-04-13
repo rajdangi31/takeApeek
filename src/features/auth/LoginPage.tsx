@@ -1,11 +1,25 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "./AuthContext";
 import { LogIn, Sparkles } from "lucide-react";
-import { Navigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export const LoginPage = () => {
     const { user, loading, signInWithGoogle } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
+
+    // If user is already logged in, redirect them away from the login page
+    useEffect(() => {
+        if (!loading && user) {
+            console.log("[LoginPage] User detected. Imperative redirecting...");
+            const from = (location.state as any)?.from?.pathname || "/";
+            // Prevent redirect loop if 'from' is current page
+            const safeFrom = from === "/login" ? "/" : from;
+            console.log(`[LoginPage] Safe Redirect to: ${safeFrom}`);
+            navigate(safeFrom, { replace: true });
+        }
+    }, [user, loading, navigate, location]);
 
     if (loading) {
         return (
@@ -13,16 +27,6 @@ export const LoginPage = () => {
                 <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
             </div>
         );
-    }
-
-    // If user is already logged in, redirect them away from the login page
-    if (user) {
-        console.log("[LoginPage] User exists, preparing redirect...");
-        const from = (location.state as any)?.from?.pathname || "/";
-        // Prevent redirect loop if 'from' is current page
-        const safeFrom = from === "/login" ? "/" : from;
-        console.log(`[LoginPage] Redirecting to: ${safeFrom} (raw from: ${from})`);
-        return <Navigate to={safeFrom} replace />;
     }
 
     return (

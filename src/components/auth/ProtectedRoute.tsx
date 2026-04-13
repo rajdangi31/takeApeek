@@ -1,5 +1,5 @@
-import { ReactNode } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { ReactNode, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../features/auth/AuthContext";
 
 interface Props {
@@ -9,6 +9,14 @@ interface Props {
 export const ProtectedRoute = ({ children }: Props) => {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      console.log("[RouteGuard] No user detected. Imperative redirect to /login from:", location.pathname);
+      navigate("/login", { state: { from: location }, replace: true });
+    }
+  }, [user, loading, navigate, location]);
 
   if (loading) {
     console.log("[RouteGuard] Loading... suppressing redirect.");
@@ -16,8 +24,8 @@ export const ProtectedRoute = ({ children }: Props) => {
   }
 
   if (!user) {
-    console.log("[RouteGuard] No user detected. Redirecting to /login from:", location.pathname);
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // Return null while navigating to avoid rendering protected components
+    return null;
   }
 
   console.log("[RouteGuard] User authorized:", user.id);

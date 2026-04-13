@@ -39,7 +39,9 @@ const PageLoader = () => (
 
 function App() {
   const location = useLocation();
-  const isLoginPage = location.pathname === "/login";
+  const isLoginPage = location.pathname.startsWith("/login");
+
+  console.log(`[App] Current Path: ${location.pathname}, isLoginPage: ${isLoginPage}`);
 
   return (
     <ErrorBoundary FallbackComponent={FallbackError}>
