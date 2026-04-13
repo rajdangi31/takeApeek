@@ -7,8 +7,12 @@ interface Props {
 }
 
 export const ProtectedRoute = ({ children }: Props) => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) {
+    return null; // Or a loading spinner
+  }
 
   if (!user) {
     // Redirect to login but save the current location to return to after login
