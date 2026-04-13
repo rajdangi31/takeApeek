@@ -17,6 +17,12 @@
 
 </div>
 
+<div align="center">
+  <img src="./homepage_showcase.png" alt="TakeAPeek Homepage Showcase" width="100%">
+</div>
+
+---
+
 ## 📖 The Vision
 
 **TakeAPeek** is a real-time social discovery platform designed for intimate circles and high-fidelity interactions. Built with a **"Glass & Glow"** design system, it bridges the gap between minimalist aesthetics and serverless engineering.
