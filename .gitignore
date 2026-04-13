@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Security & Secrets
+.env
+.env.*
+!.env.example
+client_secret_*.json
+*.docx
