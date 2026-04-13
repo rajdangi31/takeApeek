@@ -10,7 +10,9 @@ export const LoginPage = () => {
     // If user is already logged in, redirect them away from the login page
     if (user) {
         const from = (location.state as any)?.from?.pathname || "/";
-        return <Navigate to={from} replace />;
+        // Prevent redirect loop if 'from' is current page
+        const safeFrom = from === "/login" ? "/" : from;
+        return <Navigate to={safeFrom} replace />;
     }
 
     return (
@@ -60,7 +62,7 @@ export const LoginPage = () => {
                             className="w-full py-5 rounded-[1.8rem] bg-slate-900 text-white font-bold font-outfit text-sm uppercase tracking-widest flex items-center justify-center gap-4 shadow-xl hover:bg-slate-800 transition-all active:scale-95 group"
                         >
                             <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center p-1 group-hover:rotate-12 transition-transform">
-                                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="Google" />
+                                <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" className="w-full h-full object-contain" />
                             </div>
                             Continue with Google
                         </button>

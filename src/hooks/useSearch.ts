@@ -36,14 +36,18 @@ export const useSuggestions = (limit = 5) => {
   return useQuery({
     queryKey: ['profiles', 'suggestions'],
     queryFn: async (): Promise<Profile[]> => {
-      // Logic for suggestions: random accounts or based on friendships
-      // For now, let's just get the newest accounts that aren't the current user
       const { data: { user } } = await supabase.auth.getUser();
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('profiles')
-        .select('*')
-        .neq('id', user?.id || '')
+        .select('*');
+
+      // Only exclude current user if one exists
+      if (user?.id) {
+        query = query.neq('id', user.id);
+      }
+
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .limit(limit);
 
